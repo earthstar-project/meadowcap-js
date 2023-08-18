@@ -1,0 +1,10 @@
+{
+  "imports": {
+    "$std/": "https://deno.land/std@0.198.0/"
+  },
+  "tasks": {
+    "test": "deno test src",
+    "test-watch": "deno test src --watch"
+  },
+  "lock": false
+}

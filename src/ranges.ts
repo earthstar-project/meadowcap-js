@@ -187,3 +187,27 @@ export function intersect3dRanges<SubspaceIdType>(
     subspaceIntersection,
   ];
 }
+
+export function isEqualRange<ValueType>(
+  order: (a: ValueType, b: ValueType) => -1 | 0 | 1,
+  a: Range<ValueType>,
+  b: Range<ValueType>,
+) {
+  if (a.kind === "closed" && b.kind === "closed") {
+    const startOrder = order(a.start, b.start);
+
+    if (startOrder !== 0) {
+      return false;
+    }
+
+    const endOrder = order(a.end, b.end);
+
+    return endOrder === 0;
+  } else if (a.kind === "open" && b.kind === "open") {
+    const startOrder = order(a.start, b.start);
+
+    return startOrder === 0;
+  }
+
+  return false;
+}

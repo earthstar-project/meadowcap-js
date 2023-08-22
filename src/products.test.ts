@@ -5,8 +5,11 @@ import {
   DisjointRange,
   intersect3dProducts,
   intersectDisjointRanges,
+  isEqualDisjointRange,
   isSensible3dProduct,
   isSensibleDisjointRange,
+  merge3dProducts,
+  mergeDisjointRanges,
   ThreeDimensionalProduct,
 } from "./products.ts";
 import { Range, ThreeDimensionalRange } from "./ranges.ts";
@@ -803,6 +806,411 @@ Deno.test("intersect3dProducts", () => {
       },
     ],
   ]);
+});
 
-  // we trust they are correct as they rely on intersectDisjointRange
+Deno.test("isEqualDisjointRange", () => {
+  assert(isEqualDisjointRange(orderNumber, [], []));
+
+  assert(
+    isEqualDisjointRange(orderNumber, [
+      { kind: "open", start: 10 },
+      {
+        kind: "closed",
+        start: 1,
+        end: 5,
+      },
+      { kind: "closed", start: 7, end: 9 },
+    ], [
+      { kind: "open", start: 10 },
+      {
+        kind: "closed",
+        start: 1,
+        end: 5,
+      },
+      { kind: "closed", start: 7, end: 9 },
+    ]),
+  );
+
+  assert(
+    !isEqualDisjointRange(orderNumber, [
+      { kind: "open", start: 10 },
+      {
+        kind: "closed",
+        start: 1,
+        end: 5,
+      },
+      { kind: "closed", start: 7, end: 9 },
+    ], [
+      { kind: "open", start: 14 },
+      {
+        kind: "closed",
+        start: 1,
+        end: 5,
+      },
+      { kind: "closed", start: 7, end: 9 },
+    ]),
+  );
+
+  assert(
+    !isEqualDisjointRange(orderNumber, [
+      { kind: "open", start: 10 },
+      {
+        kind: "closed",
+        start: 1,
+        end: 5,
+      },
+      { kind: "closed", start: 7, end: 9 },
+    ], []),
+  );
+});
+
+// This test being this way is premised on it using addToDisjointRanges
+Deno.test("mergeDisjointRanges", () => {
+  const range1: Range<number> = {
+    kind: "open",
+    start: 30,
+  };
+
+  const range2: Range<number> = {
+    kind: "closed",
+    start: 4,
+    end: 24,
+  };
+
+  const range3: Range<number> = {
+    kind: "open",
+    start: 29,
+  };
+
+  const range4: Range<number> = {
+    kind: "closed",
+    start: 2,
+    end: 16,
+  };
+
+  const firstStep = addToDisjointRange(orderNumber, range1);
+  const secondStep = addToDisjointRange(orderNumber, range2, firstStep);
+  const thirdStep = addToDisjointRange(orderNumber, range3, secondStep);
+  const expected = addToDisjointRange(orderNumber, range4, thirdStep);
+
+  const actual = mergeDisjointRanges(orderNumber, [range1], [range2, range3], [
+    range4,
+  ]);
+
+  assertEquals(actual, expected);
+});
+
+Deno.test("merge3dProducts", () => {
+  // Okay we've tested mergeDisjointRanges...
+  // and isEqualDisjointRange
+  // this test is not as thorough as I'd like
+  // TODO: Generate random products, make two dimensions match
+  // Compare the merged non-matching dimension with addToDisjointRange result
+
+  // Until then...
+  // If any pairs match, return the merged version
+
+  const timestampOld = new Uint8Array(8);
+  const timestampOldView = new DataView(timestampOld.buffer);
+  timestampOldView.setBigUint64(0, BigInt(1000));
+
+  const timestampNew = new Uint8Array(8);
+  const timestampNewView = new DataView(timestampNew.buffer);
+  timestampNewView.setBigUint64(0, BigInt(3000));
+
+  const timestampNewer = new Uint8Array(8);
+  const timestampNewerView = new DataView(timestampNewer.buffer);
+  timestampNewerView.setBigUint64(0, BigInt(9000));
+
+  const pathA = new TextEncoder().encode("aaaa");
+  const pathG = new TextEncoder().encode("gggg");
+  const pathT = new TextEncoder().encode("tttt");
+
+  // timestamp x path match
+
+  const product1a: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathA },
+    ],
+    [
+      {
+        kind: "open",
+        start: 17,
+      },
+    ],
+  ];
+
+  const product1b: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathA },
+    ],
+    [
+      {
+        kind: "open",
+        start: 16,
+      },
+      {
+        kind: "closed",
+        start: 1,
+        end: 3,
+      },
+    ],
+  ];
+
+  const product1c: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathA },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 12,
+        end: 19,
+      },
+    ],
+  ];
+
+  const product1d: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathA },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 14,
+        end: 17,
+      },
+    ],
+  ];
+
+  assertEquals(
+    merge3dProducts(orderNumber, product1a, product1b, product1c, product1d),
+    [
+      [
+        {
+          kind: "open",
+          start: timestampNew,
+        },
+      ],
+      [{ kind: "open", start: pathA }],
+      [{ kind: "closed", start: 1, end: 3 }, { kind: "open", start: 12 }],
+    ],
+  );
+
+  // timestamp x subspace
+
+  const product2a: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathA },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 12,
+        end: 19,
+      },
+    ],
+  ];
+
+  const product2b: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathG },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 12,
+        end: 19,
+      },
+    ],
+  ];
+
+  const product2c: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "closed", start: pathG, end: pathT },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 12,
+        end: 19,
+      },
+    ],
+  ];
+
+  const product2d: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathT },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 12,
+        end: 19,
+      },
+    ],
+  ];
+
+  assertEquals(
+    merge3dProducts(orderNumber, product2a, product2b, product2c, product2d),
+    [
+      [
+        {
+          kind: "open",
+          start: timestampNew,
+        },
+      ],
+      [{ kind: "open", start: pathA }],
+      [{ kind: "closed", start: 12, end: 19 }],
+    ],
+  );
+
+  // path x subspace
+
+  const product3a: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathG },
+    ],
+    [
+      {
+        kind: "open",
+        start: 17,
+      },
+    ],
+  ];
+
+  const product3b: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "closed", start: timestampOld, end: timestampNewer },
+    ],
+    [
+      { kind: "open", start: pathG },
+    ],
+    [
+      {
+        kind: "open",
+        start: 17,
+      },
+    ],
+  ];
+
+  const product3c: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathG },
+    ],
+    [
+      {
+        kind: "open",
+        start: 17,
+      },
+    ],
+  ];
+
+  const product3d: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "closed", start: timestampNew, end: timestampNewer },
+    ],
+    [
+      { kind: "open", start: pathG },
+    ],
+    [
+      {
+        kind: "open",
+        start: 17,
+      },
+    ],
+  ];
+
+  assertEquals(
+    merge3dProducts(orderNumber, product3a, product3b, product3c, product3d),
+    [
+      [
+        {
+          kind: "open",
+          start: timestampOld,
+        },
+      ],
+      [{ kind: "open", start: pathG }],
+      [{ kind: "open", start: 17 }],
+    ],
+  );
+
+  // If no pairwise match, return null.
+
+  const product4a: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathT },
+    ],
+    [
+      {
+        kind: "open",
+        start: 17,
+      },
+    ],
+  ];
+
+  const product4b: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNew },
+    ],
+    [
+      { kind: "open", start: pathT },
+    ],
+    [
+      {
+        kind: "open",
+        start: 2,
+      },
+    ],
+  ];
+
+  const product4c: ThreeDimensionalProduct<number> = [
+    [
+      { kind: "open", start: timestampNewer },
+    ],
+    [
+      { kind: "open", start: pathT },
+    ],
+    [
+      {
+        kind: "open",
+        start: 17,
+      },
+    ],
+  ];
+
+  assert(!merge3dProducts(orderNumber, product4a, product4b, product4c));
 });

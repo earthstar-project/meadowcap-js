@@ -2,6 +2,7 @@ import { assert, assertEquals, assertThrows } from "$std/assert/mod.ts";
 import {
   intersect3dRanges,
   intersectRanges,
+  isEqualRange,
   isSensible3dRange,
   isSensibleRange,
   Range,
@@ -355,4 +356,57 @@ Deno.test("intersect3dRanges", () => {
   ]);
 
   // we trust they are correct as they rely on intersectDisjointRange
+});
+
+Deno.test("isEqualRange", () => {
+  assert(isEqualRange(orderNumber, {
+    kind: "open",
+    start: 3,
+  }, {
+    kind: "open",
+    start: 3,
+  }));
+
+  assert(isEqualRange(orderNumber, {
+    kind: "closed",
+    start: 3,
+    end: 6,
+  }, {
+    kind: "closed",
+    start: 3,
+    end: 6,
+  }));
+
+  assert(
+    !isEqualRange(orderNumber, {
+      kind: "open",
+      start: 3,
+    }, {
+      kind: "open",
+      start: 4,
+    }),
+  );
+
+  assert(
+    !isEqualRange(orderNumber, {
+      kind: "closed",
+      start: 3,
+      end: 6,
+    }, {
+      kind: "closed",
+      start: 2,
+      end: 6,
+    }),
+  );
+
+  assert(
+    !isEqualRange(orderNumber, {
+      kind: "open",
+      start: 3,
+    }, {
+      kind: "closed",
+      start: 3,
+      end: 6,
+    }),
+  );
 });

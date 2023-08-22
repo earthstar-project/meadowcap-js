@@ -1,6 +1,7 @@
 import { orderBytes, orderTimestamps } from "./orders.ts";
 import {
   intersectRanges,
+  isEqualRange,
   isSensible3dRange,
   isSensibleRange,
   Range,
@@ -241,6 +242,48 @@ export function intersectDisjointRanges<ValueType>(
   return newRange;
 }
 
+export function isEqualDisjointRange<ValueType>(
+  order: (a: ValueType, b: ValueType) => -1 | 0 | 1,
+  a: DisjointRange<ValueType>,
+  b: DisjointRange<ValueType>,
+): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  for (let i = 0; i < a.length; i++) {
+    const rangeA = a[i];
+    const rangeB = b[i];
+
+    if (isEqualRange(order, rangeA, rangeB) === false) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function mergeDisjointRanges<ValueType>(
+  order: (a: ValueType, b: ValueType) => -1 | 0 | 1,
+  ...disjointRanges: DisjointRange<ValueType>[]
+): DisjointRange<ValueType> {
+  const [first, ...rest] = disjointRanges;
+
+  let mergedDisjointRange = [...first];
+
+  for (const disjointRange of rest) {
+    for (const range of disjointRange) {
+      mergedDisjointRange = addToDisjointRange(
+        order,
+        range,
+        mergedDisjointRange,
+      );
+    }
+  }
+
+  return mergedDisjointRange;
+}
+
 // Three dimensional products
 
 /** A product made of three disjoint ranges, representing timestamps, paths, and subspace IDs respectively. */
@@ -391,4 +434,174 @@ export function intersect3dProducts<SubspaceIdType>(
     intersectionPath,
     intersectionSubspace,
   ];
+}
+
+type DimensionPairing =
+  | "timestamp_path"
+  | "timestamp_subspace"
+  | "path_subspace";
+
+function allRangesMatchOnDimensions<SubspaceIdType>(
+  subspaceOrder: (
+    a: SubspaceIdType,
+    b: SubspaceIdType,
+  ) => -1 | 0 | 1,
+  dimensions: DimensionPairing,
+  ...remainingProducts: ThreeDimensionalProduct<SubspaceIdType>[]
+): boolean {
+  for (let i = 0; i < remainingProducts.length - 1; i++) {
+    const productA = remainingProducts[i];
+    const productB = remainingProducts[i + 1];
+
+    if (dimensions === "timestamp_path") {
+      const timestampDjEqual = isEqualDisjointRange(
+        orderTimestamps,
+        productA[0],
+        productB[0],
+      );
+
+      if (!timestampDjEqual) {
+        return false;
+      }
+
+      const pathDjEqual = isEqualDisjointRange(
+        orderBytes,
+        productA[1],
+        productB[1],
+      );
+
+      if (!pathDjEqual) {
+        return false;
+      }
+    } else if (dimensions === "timestamp_subspace") {
+      const timestampDjEqual = isEqualDisjointRange(
+        orderTimestamps,
+        productA[0],
+        productB[0],
+      );
+
+      if (!timestampDjEqual) {
+        return false;
+      }
+
+      const subspaceDjEqual = isEqualDisjointRange(
+        subspaceOrder,
+        productA[2],
+        productB[2],
+      );
+
+      if (!subspaceDjEqual) {
+        return false;
+      }
+    } else if (dimensions === "path_subspace") {
+      const pathDjEqual = isEqualDisjointRange(
+        orderBytes,
+        productA[1],
+        productB[1],
+      );
+
+      if (!pathDjEqual) {
+        return false;
+      }
+
+      const subspaceDjEqual = isEqualDisjointRange(
+        subspaceOrder,
+        productA[2],
+        productB[2],
+      );
+
+      if (!subspaceDjEqual) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+export function merge3dProducts<SubspaceIdType>(
+  orderSubspace: (
+    a: SubspaceIdType,
+    b: SubspaceIdType,
+  ) => -1 | 0 | 1,
+  ...products: ThreeDimensionalProduct<SubspaceIdType>[]
+): ThreeDimensionalProduct<SubspaceIdType> | null {
+  const [fst, snd] = products;
+  const [_fst, ...remainingProducts] = products;
+
+  const [timestampDjA, pathDjA, subspaceDjA] = fst;
+  const [timestampDjB, pathDjB, subspaceDjB] = snd;
+
+  const subspaceIsEqual = isEqualDisjointRange(
+    orderSubspace,
+    subspaceDjA,
+    subspaceDjB,
+  );
+  const timestampIsEqual = isEqualDisjointRange(
+    orderTimestamps,
+    timestampDjA,
+    timestampDjB,
+  );
+
+  if (subspaceIsEqual && timestampIsEqual) {
+    // Check all remaining pairs have same subspace + timestamp.
+    const allOtherPairsMatch = allRangesMatchOnDimensions(
+      orderSubspace,
+      "timestamp_subspace",
+      ...remainingProducts,
+    );
+
+    if (allOtherPairsMatch) {
+      return [
+        timestampDjA,
+        mergeDisjointRanges(
+          orderBytes,
+          ...products.map((product) => product[1]),
+        ),
+        subspaceDjA,
+      ];
+    }
+  }
+
+  const pathIsEqual = isEqualDisjointRange(orderBytes, pathDjA, pathDjB);
+
+  if (
+    (pathIsEqual && timestampIsEqual)
+  ) {
+    const allOtherPairsMatch = allRangesMatchOnDimensions(
+      orderSubspace,
+      "timestamp_path",
+      ...remainingProducts,
+    );
+
+    if (allOtherPairsMatch) {
+      return [
+        timestampDjA,
+        pathDjA,
+        mergeDisjointRanges(
+          orderSubspace,
+          ...products.map((product) => product[2]),
+        ),
+      ];
+    }
+  } else if ((pathIsEqual && subspaceIsEqual)) {
+    const allOtherPairsMatch = allRangesMatchOnDimensions(
+      orderSubspace,
+      "path_subspace",
+      ...remainingProducts,
+    );
+
+    if (allOtherPairsMatch) {
+      return [
+        mergeDisjointRanges(
+          orderTimestamps,
+          ...products.map((product) => product[0]),
+        ),
+        pathDjA,
+        subspaceDjA,
+      ];
+    }
+  }
+
+  return null;
 }

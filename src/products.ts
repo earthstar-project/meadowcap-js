@@ -1,5 +1,6 @@
 import { orderBytes, orderTimestamps } from "./orders.ts";
 import {
+  intersectRanges,
   isSensible3dRange,
   isSensibleRange,
   Range,
@@ -214,6 +215,32 @@ export function addToDisjointRange<ValueType>(
   return newProduct;
 }
 
+export function intersectDisjointRanges<ValueType>(
+  order: (a: ValueType, b: ValueType) => -1 | 0 | 1,
+  a: DisjointRange<ValueType>,
+  b: DisjointRange<ValueType>,
+) {
+  if (
+    !isSensibleDisjointRange(order, a) || !isSensibleDisjointRange(order, b)
+  ) {
+    throw new Error("Passed nonsense disjoint range");
+  }
+
+  const newRange: DisjointRange<ValueType> = [];
+
+  for (const rangeA of a) {
+    for (const rangeB of b) {
+      const intersection = intersectRanges(order, rangeA, rangeB);
+
+      if (intersection) {
+        newRange.push(intersection);
+      }
+    }
+  }
+
+  return newRange;
+}
+
 // Three dimensional products
 
 /** A product made of three disjoint ranges, representing timestamps, paths, and subspace IDs respectively. */
@@ -311,5 +338,57 @@ export function addTo3dProduct<SubspaceIdType>(
     nextTimestampDisjoint,
     nextPathDisjoint,
     nextSubspaceDisjoint,
+  ];
+}
+
+export function intersect3dProducts<SubspaceIdType>(
+  orderSubspace: (a: SubspaceIdType, b: SubspaceIdType) => -1 | 0 | 1,
+  a: ThreeDimensionalProduct<SubspaceIdType>,
+  b: ThreeDimensionalProduct<SubspaceIdType>,
+): ThreeDimensionalProduct<SubspaceIdType> {
+  if (
+    !isSensible3dProduct(orderSubspace, a) ||
+    !isSensible3dProduct(orderSubspace, b)
+  ) {
+    throw new Error("Passed non-sensible 3d product(s) to intersect");
+  }
+
+  const [timestampDjA, pathDjA, subspaceDjA] = a;
+  const [timestampDjB, pathDjB, subspaceDjB] = b;
+
+  const intersectionTimestamp = intersectDisjointRanges(
+    orderTimestamps,
+    timestampDjA,
+    timestampDjB,
+  );
+
+  if (intersectionTimestamp.length === 0) {
+    return [[], [], []];
+  }
+
+  const intersectionPath = intersectDisjointRanges(
+    orderBytes,
+    pathDjA,
+    pathDjB,
+  );
+
+  if (intersectionPath.length === 0) {
+    return [[], [], []];
+  }
+
+  const intersectionSubspace = intersectDisjointRanges(
+    orderSubspace,
+    subspaceDjA,
+    subspaceDjB,
+  );
+
+  if (intersectionSubspace.length === 0) {
+    return [[], [], []];
+  }
+
+  return [
+    intersectionTimestamp,
+    intersectionPath,
+    intersectionSubspace,
   ];
 }

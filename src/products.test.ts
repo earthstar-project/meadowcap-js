@@ -3,6 +3,8 @@ import {
   addTo3dProduct,
   addToDisjointRange,
   DisjointRange,
+  intersect3dProducts,
+  intersectDisjointRanges,
   isSensible3dProduct,
   isSensibleDisjointRange,
   ThreeDimensionalProduct,
@@ -26,12 +28,12 @@ function getNumbers(size: number, startAt = 0) {
 }
 
 function getNumbersOfDisjointRange(
-  product: DisjointRange<number>,
+  disjointRange: DisjointRange<number>,
   max: number,
 ) {
   const numbers = new Set<number>();
 
-  for (const range of product) {
+  for (const range of disjointRange) {
     if (range.kind === "open") {
       const numbersOfRange = getNumbers(max - range.start, range.start);
 
@@ -177,16 +179,87 @@ Deno.test("addToDisjointRange", () => {
         100,
       );
 
-      //   console.log({ disjointRange, newRange, newDisjointRange });
-      //    console.log(Array.from(expectedNumbers).toSorted(orderNumber));
-      //   console.log(Array.from(newDisjointRangeNumbers).toSorted(orderNumber));
-
       assertEquals(
         Array.from(expectedNumbers).toSorted(orderNumber),
         Array.from(newDisjointRangeNumbers).toSorted(orderNumber),
       );
 
       disjointRange = newDisjointRange;
+    }
+  }
+});
+
+function makeDisjointRange(maxSize: number) {
+  const dj: DisjointRange<number> = [];
+  let rangeStart = 0;
+
+  while (true) {
+    const startDelta = Math.floor(Math.random() * (10 - 1) + 1);
+
+    const isOpen = Math.random() < 0.15;
+
+    if (isOpen) {
+      dj.push({
+        kind: "open",
+        start: Math.min(maxSize, rangeStart + startDelta),
+      });
+
+      break;
+    }
+
+    const size = Math.floor(Math.random() * (10 - 1) + 1);
+
+    const end = rangeStart + startDelta + size;
+
+    if (end >= maxSize) {
+      break;
+    }
+
+    dj.push({
+      kind: "closed",
+      start: rangeStart + startDelta,
+      end: rangeStart + startDelta + size,
+    });
+
+    rangeStart = rangeStart + startDelta + size;
+
+    if (rangeStart >= maxSize) {
+      break;
+    }
+  }
+
+  return dj;
+}
+
+Deno.test("intersectDisjointRange", () => {
+  for (let i = 0; i < 100; i++) {
+    const dj1 = makeDisjointRange(200);
+    const dj2 = makeDisjointRange(200);
+
+    const intersection = intersectDisjointRanges(orderNumber, dj1, dj2);
+
+    const numbers1 = getNumbersOfDisjointRange(dj1, 200);
+    const numbers2 = getNumbersOfDisjointRange(dj2, 200);
+
+    if (intersection) {
+      const intersectionNumbers = getNumbersOfDisjointRange(intersection, 200);
+
+      assert(
+        isSensibleDisjointRange(orderNumber, intersection),
+        `Non-sensible intersection detected`,
+      );
+
+      for (const num1 of numbers1) {
+        if (numbers2.has(num1)) {
+          assert(intersectionNumbers.has(num1));
+        } else {
+          assert(!intersectionNumbers.has(num1));
+        }
+      }
+    } else {
+      for (const num1 of numbers1) {
+        assert(!numbers2.has(num1));
+      }
     }
   }
 });
@@ -555,4 +628,181 @@ Deno.test("addTo3dProduct", () => {
       },
     ],
   ]);
+});
+
+// This test can only be trusted while intersect3dProduct is dependent on intersectDisjointRanges
+Deno.test("intersect3dProducts", () => {
+  const timestampOld = new Uint8Array(8);
+  const timestampOldView = new DataView(timestampOld.buffer);
+  timestampOldView.setBigUint64(0, BigInt(1000));
+
+  const timestampNew = new Uint8Array(8);
+  const timestampNewView = new DataView(timestampNew.buffer);
+  timestampNewView.setBigUint64(0, BigInt(3000));
+
+  const timestampNewer = new Uint8Array(8);
+  const timestampNewerView = new DataView(timestampNewer.buffer);
+  timestampNewerView.setBigUint64(0, BigInt(9000));
+
+  const pathA = new TextEncoder().encode("aaaa");
+  const pathG = new TextEncoder().encode("gggg");
+  const pathT = new TextEncoder().encode("tttt");
+
+  // throws if passed nonsense product
+
+  const emptyProduct: ThreeDimensionalProduct<number> = [
+    [],
+    [],
+    [],
+  ];
+
+  const nonsenseProduct1: ThreeDimensionalProduct<number> = [
+    [
+      {
+        kind: "closed",
+        start: timestampOld,
+        end: timestampNew,
+      },
+    ],
+    [],
+    [],
+  ];
+
+  assertThrows(() => {
+    intersect3dProducts(orderNumber, emptyProduct, nonsenseProduct1);
+  });
+
+  // If any dimension is empty, it should be empty.
+
+  const product1: ThreeDimensionalProduct<number> = [
+    [
+      {
+        kind: "closed",
+        start: timestampOld,
+        end: timestampNew,
+      },
+    ],
+    [
+      {
+        kind: "closed",
+        start: pathA,
+        end: pathG,
+      },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 2,
+        end: 7,
+      },
+    ],
+  ];
+
+  const product2: ThreeDimensionalProduct<number> = [
+    [
+      {
+        kind: "closed",
+        start: timestampOld,
+        end: timestampNew,
+      },
+    ],
+    // The dimension with no intersection
+    [
+      {
+        kind: "closed",
+        start: pathG,
+        end: pathT,
+      },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 2,
+        end: 7,
+      },
+    ],
+  ];
+
+  const res1 = intersect3dProducts(orderNumber, product1, product2);
+
+  assertEquals(res1, emptyProduct);
+
+  // Otherwise all disjoint ranges have at least one range in them
+
+  const product3: ThreeDimensionalProduct<number> = [
+    [
+      {
+        kind: "closed",
+        start: timestampOld,
+        end: timestampNewer,
+      },
+    ],
+    [
+      {
+        kind: "closed",
+        start: pathA,
+        end: pathT,
+      },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 2,
+        end: 7,
+      },
+    ],
+  ];
+
+  const product4: ThreeDimensionalProduct<number> = [
+    [
+      {
+        kind: "closed",
+        start: timestampOld,
+        end: timestampNew,
+      },
+    ],
+    // The dimension with no intersection
+    [
+      {
+        kind: "closed",
+        start: pathG,
+        end: pathT,
+      },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 1,
+        end: 4,
+      },
+    ],
+  ];
+
+  const res2 = intersect3dProducts(orderNumber, product3, product4);
+
+  assertEquals(res2, [
+    [
+      {
+        kind: "closed",
+        start: timestampOld,
+        end: timestampNew,
+      },
+    ],
+    [
+      {
+        kind: "closed",
+        start: pathG,
+        end: pathT,
+      },
+    ],
+    [
+      {
+        kind: "closed",
+        start: 2,
+        end: 4,
+      },
+    ],
+  ]);
+
+  // we trust they are correct as they rely on intersectDisjointRange
 });

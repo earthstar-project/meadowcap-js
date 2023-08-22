@@ -63,3 +63,127 @@ export function isSensible3dRange<SubspaceIdType>(
 
   return true;
 }
+
+export function intersectRanges<ValueType>(
+  order: (a: ValueType, b: ValueType) => -1 | 0 | 1,
+  a: Range<ValueType>,
+  b: Range<ValueType>,
+): Range<ValueType> | null {
+  if (!isSensibleRange(order, a) || !isSensibleRange(order, b)) {
+    throw new Error("Non-sensible ranges given");
+  }
+
+  if (a.kind === "open" && b.kind === "open") {
+    return {
+      kind: "open",
+      start: order(a.start, b.start) <= 0 ? b.start : a.start,
+    };
+  }
+
+  if (a.kind === "open" && b.kind === "closed") {
+    const aStartBStartOrder = order(a.start, b.start);
+    const aStartBEndOrder = order(a.start, b.end);
+
+    if (aStartBStartOrder <= 0) {
+      return b;
+    } else if (aStartBStartOrder > 0 && aStartBEndOrder < 0) {
+      return {
+        kind: "closed",
+        start: a.start,
+        end: b.end,
+      };
+    }
+
+    return null;
+  }
+
+  if (b.kind === "open" && a.kind === "closed") {
+    const bStartAStartOrder = order(b.start, a.start);
+    const bStartAEndOrder = order(b.start, a.end);
+
+    if (bStartAStartOrder <= 0) {
+      return a;
+    } else if (bStartAStartOrder > 0 && bStartAEndOrder < 0) {
+      return {
+        kind: "closed",
+        start: b.start,
+        end: a.end,
+      };
+    }
+
+    return null;
+  }
+
+  if (a.kind === "closed" && b.kind === "closed") {
+    // Find distinct ranges
+
+    const min = order(a.start, b.start) < 0 ? a : b;
+    const max = min === a ? b : a;
+
+    if (order(min.end, max.start) < 0) {
+      return null;
+    }
+
+    const end = min.end < max.end ? min.end : max.end;
+
+    if (order(max.start, end) > -1) {
+      return null;
+    }
+
+    return {
+      kind: "closed",
+      start: max.start,
+      end: min.end < max.end ? min.end : max.end,
+    };
+  }
+
+  return null;
+}
+
+export function intersect3dRanges<SubspaceIdType>(
+  order: (
+    a: SubspaceIdType,
+    b: SubspaceIdType,
+  ) => -1 | 0 | 1,
+  a: ThreeDimensionalRange<SubspaceIdType>,
+  b: ThreeDimensionalRange<SubspaceIdType>,
+): ThreeDimensionalRange<SubspaceIdType> | null {
+  const [timestampRangeA, pathRangeA, subspaceRangeA] = a;
+  const [timestampRangeB, pathRangeB, subspaceRangeB] = b;
+
+  const timestampIntersection = intersectRanges(
+    orderTimestamps,
+    timestampRangeA,
+    timestampRangeB,
+  );
+
+  if (timestampIntersection === null) {
+    return null;
+  }
+
+  const pathIntersection = intersectRanges(
+    orderBytes,
+    pathRangeA,
+    pathRangeB,
+  );
+
+  if (pathIntersection === null) {
+    return null;
+  }
+
+  const subspaceIntersection = intersectRanges(
+    order,
+    subspaceRangeA,
+    subspaceRangeB,
+  );
+
+  if (subspaceIntersection === null) {
+    return null;
+  }
+
+  return [
+    timestampIntersection,
+    pathIntersection,
+    subspaceIntersection,
+  ];
+}

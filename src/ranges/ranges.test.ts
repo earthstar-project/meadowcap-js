@@ -3,11 +3,10 @@ import {
   intersect3dRanges,
   intersectRanges,
   isEqualRange,
-  isSensible3dRange,
-  isSensibleRange,
-  Range,
-  ThreeDimensionalRange,
+  isValid3dRange,
+  isValidRange,
 } from "./ranges.ts";
+import { Range, ThreeDimensionalRange } from "./types.ts";
 
 function orderNumber(a: number, b: number) {
   if (a > b) {
@@ -19,38 +18,52 @@ function orderNumber(a: number, b: number) {
   return 0;
 }
 
-Deno.test("isRangeSensible", () => {
+Deno.test("isValidRange", () => {
   const nonsenseRange1: Range<number> = {
-    kind: "closed",
+    kind: "closed_exclusive",
     start: 1,
     end: 1,
   };
 
   const nonsenseRange2: Range<number> = {
-    kind: "closed",
+    kind: "closed_exclusive",
     start: 2,
     end: 1,
   };
 
-  assert(!isSensibleRange(orderNumber, nonsenseRange1));
-  assert(!isSensibleRange(orderNumber, nonsenseRange2));
+  const nonsenseRange3: Range<number> = {
+    kind: "closed_inclusive",
+    start: 2,
+    end: 1,
+  };
+
+  assert(!isValidRange(orderNumber, nonsenseRange1));
+  assert(!isValidRange(orderNumber, nonsenseRange2));
+  assert(!isValidRange(orderNumber, nonsenseRange3));
 
   const sensibleRange1: Range<number> = {
-    kind: "closed",
+    kind: "closed_exclusive",
     start: 1,
     end: 3,
   };
 
   const sensibleRange2: Range<number> = {
+    kind: "closed_inclusive",
+    start: 2,
+    end: 2,
+  };
+
+  const sensibleRange3: Range<number> = {
     kind: "open",
     start: 3,
   };
 
-  assert(isSensibleRange(orderNumber, sensibleRange1));
-  assert(isSensibleRange(orderNumber, sensibleRange2));
+  assert(isValidRange(orderNumber, sensibleRange1));
+  assert(isValidRange(orderNumber, sensibleRange2));
+  assert(isValidRange(orderNumber, sensibleRange3));
 });
 
-Deno.test("is3dRangeSensible", () => {
+Deno.test("isValid3dRange", () => {
   const timestampOld = new Uint8Array(8);
   const timestampOldView = new DataView(timestampOld.buffer);
   timestampOldView.setBigUint64(0, BigInt(1000));
@@ -64,12 +77,12 @@ Deno.test("is3dRangeSensible", () => {
 
   const sensibleRange: ThreeDimensionalRange<number> = [
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: timestampOld,
       end: timestampNew,
     },
     {
-      kind: "closed",
+      kind: "closed_inclusive",
       start: pathA,
       end: pathG,
     },
@@ -79,16 +92,16 @@ Deno.test("is3dRangeSensible", () => {
     },
   ];
 
-  assert(isSensible3dRange(orderNumber, sensibleRange));
+  assert(isValid3dRange(orderNumber, sensibleRange));
 
   const nonsenseRange1: ThreeDimensionalRange<number> = [
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: timestampOld,
       end: timestampNew,
     },
     {
-      kind: "closed",
+      kind: "closed_inclusive",
       start: pathG,
       end: pathA,
     },
@@ -98,7 +111,7 @@ Deno.test("is3dRangeSensible", () => {
     },
   ];
 
-  assert(!isSensible3dRange(orderNumber, nonsenseRange1));
+  assert(!isValid3dRange(orderNumber, nonsenseRange1));
 });
 
 function getNumbers(size: number, startAt = 0) {
@@ -112,8 +125,12 @@ function getNumbersOfRange(range: Range<number>, maxSize: number): Set<number> {
     for (let i = range.start; i < maxSize; i++) {
       numbers.add(i);
     }
-  } else {
+  } else if (range.kind === "closed_exclusive") {
     for (const num of getNumbers(range.end - range.start, range.start)) {
+      numbers.add(num);
+    }
+  } else {
+    for (const num of getNumbers(range.end - range.start + 1, range.start)) {
       numbers.add(num);
     }
   }
@@ -126,34 +143,62 @@ Deno.test("intersectRanges", () => {
     const startA = Math.floor(Math.random() * 49);
     const startB = Math.floor(Math.random() * 49);
 
-    const aIsOpen = Math.random() >= 0.5;
-    const bIsOpen = Math.random() >= 0.5;
+    const aRoll = Math.random();
+    const bRoll = Math.random();
 
-    const aRange: Range<number> = aIsOpen
+    const aType: Range<number>["kind"] = aRoll < 0.33
+      ? "open"
+      : aRoll < 0.66
+      ? "closed_exclusive"
+      : "closed_inclusive";
+    const bType: Range<number>["kind"] = bRoll < 0.33
+      ? "open"
+      : bRoll < 0.66
+      ? "closed_exclusive"
+      : "closed_inclusive";
+
+    const aRange: Range<number> = aType === "open"
       ? {
         kind: "open",
         start: startA,
       }
-      : {
-        kind: "closed",
+      : aType === "closed_exclusive"
+      ? {
+        kind: "closed_exclusive",
         start: startA,
         end: Math.floor(Math.random() * (49 - startA + 1) + startA + 1),
+      }
+      : {
+        kind: "closed_inclusive",
+        start: startA,
+        end: Math.floor(Math.random() * (48 - startA + 1) + startA + 1),
       };
 
-    const bRange: Range<number> = bIsOpen
+    const bRange: Range<number> = bType === "open"
       ? {
         kind: "open",
         start: startB,
       }
-      : {
-        kind: "closed",
+      : bType === "closed_exclusive"
+      ? {
+        kind: "closed_exclusive",
         start: startB,
         end: Math.floor(Math.random() * (49 - startB + 1) + startB + 1),
+      }
+      : {
+        kind: "closed_inclusive",
+        start: startB,
+        end: Math.floor(Math.random() * (48 - startB + 1) + startB + 1),
       };
 
     // get results from new range
 
-    const intersectedRange = intersectRanges(orderNumber, aRange, bRange);
+    const intersectedRange = intersectRanges(
+      orderNumber,
+      getSuccessorNumber,
+      aRange,
+      bRange,
+    );
 
     const aRangeNumbers = getNumbersOfRange(aRange, 50);
     const bRangeNumbers = getNumbersOfRange(bRange, 50);
@@ -178,12 +223,11 @@ Deno.test("intersectRanges", () => {
         } else {
           assert(
             !intersectedNumbers.has(numA),
-            `${Array.from(aRangeNumbers)}
-						
-						${Array.from(bRangeNumbers)}
-						
-						${Array.from(intersectedNumbers)}
-												`,
+            `
+aNumbers: ${Array.from(aRangeNumbers)}
+bNumbers: ${Array.from(bRangeNumbers)}
+intersectedNumbers: ${Array.from(intersectedNumbers)}
+`,
           );
         }
       }
@@ -197,12 +241,11 @@ Deno.test("intersectRanges", () => {
         } else {
           assert(
             !intersectedNumbers.has(numB),
-            `${Array.from(aRangeNumbers)}
-
-${Array.from(bRangeNumbers)}
-
-${Array.from(intersectedNumbers)}
-						`,
+            `
+aNumbers: ${Array.from(aRangeNumbers)}
+bNumbers: ${Array.from(bRangeNumbers)}
+intersectedNumbers: ${Array.from(intersectedNumbers)}
+`,
           );
         }
       }
@@ -233,7 +276,7 @@ Deno.test("intersect3dRanges", () => {
   // throws if passed nonsense product
 
   const nonsenseRange: ThreeDimensionalRange<number> = [
-    { kind: "closed", start: timestampNewer, end: timestampOld },
+    { kind: "closed_exclusive", start: timestampNewer, end: timestampOld },
     { kind: "open", start: pathA },
     { kind: "open", start: 2 },
   ];
@@ -245,26 +288,31 @@ Deno.test("intersect3dRanges", () => {
   ];
 
   assertThrows(() => {
-    intersect3dRanges(orderNumber, nonsenseRange, openRange);
+    intersect3dRanges(
+      orderNumber,
+      getSuccessorNumber,
+      nonsenseRange,
+      openRange,
+    );
   });
 
   // If any dimension is empty, it should be empty.
 
   const range1: ThreeDimensionalRange<number> = [
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: timestampOld,
       end: timestampNew,
     },
 
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: pathA,
       end: pathG,
     },
 
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: 2,
       end: 7,
     },
@@ -272,7 +320,7 @@ Deno.test("intersect3dRanges", () => {
 
   const range2: ThreeDimensionalRange<number> = [
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: timestampOld,
       end: timestampNew,
     },
@@ -280,19 +328,24 @@ Deno.test("intersect3dRanges", () => {
     // The dimension with no intersection
 
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: pathG,
       end: pathT,
     },
 
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: 2,
       end: 7,
     },
   ];
 
-  const res1 = intersect3dRanges(orderNumber, range1, range2);
+  const res1 = intersect3dRanges(
+    orderNumber,
+    getSuccessorNumber,
+    range1,
+    range2,
+  );
 
   assert(!res1);
 
@@ -300,17 +353,17 @@ Deno.test("intersect3dRanges", () => {
 
   const range3: ThreeDimensionalRange<number> = [
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: timestampOld,
       end: timestampNewer,
     },
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: pathA,
       end: pathT,
     },
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: 2,
       end: 7,
     },
@@ -318,38 +371,43 @@ Deno.test("intersect3dRanges", () => {
 
   const range4: ThreeDimensionalRange<number> = [
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: timestampOld,
       end: timestampNew,
     },
     // The dimension with no intersection
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: pathG,
       end: pathT,
     },
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: 1,
       end: 4,
     },
   ];
 
-  const res2 = intersect3dRanges(orderNumber, range3, range4);
+  const res2 = intersect3dRanges(
+    orderNumber,
+    getSuccessorNumber,
+    range3,
+    range4,
+  );
 
   assertEquals(res2, [
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: timestampOld,
       end: timestampNew,
     },
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: pathG,
       end: pathT,
     },
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: 2,
       end: 4,
     },
@@ -358,8 +416,14 @@ Deno.test("intersect3dRanges", () => {
   // we trust they are correct as they rely on intersectDisjointRange
 });
 
+function getSuccessorNumber(num: number): number {
+  return num + 1;
+}
+
 Deno.test("isEqualRange", () => {
-  assert(isEqualRange(orderNumber, {
+  // Valid
+
+  assert(isEqualRange(orderNumber, getSuccessorNumber, {
     kind: "open",
     start: 3,
   }, {
@@ -367,18 +431,40 @@ Deno.test("isEqualRange", () => {
     start: 3,
   }));
 
-  assert(isEqualRange(orderNumber, {
-    kind: "closed",
+  assert(isEqualRange(orderNumber, getSuccessorNumber, {
+    kind: "closed_exclusive",
     start: 3,
     end: 6,
   }, {
-    kind: "closed",
+    kind: "closed_exclusive",
     start: 3,
     end: 6,
   }));
+
+  assert(isEqualRange(orderNumber, getSuccessorNumber, {
+    kind: "closed_exclusive",
+    start: 3,
+    end: 7,
+  }, {
+    kind: "closed_inclusive",
+    start: 3,
+    end: 6,
+  }));
+
+  assert(isEqualRange(orderNumber, getSuccessorNumber, {
+    kind: "closed_inclusive",
+    start: 3,
+    end: 7,
+  }, {
+    kind: "closed_inclusive",
+    start: 3,
+    end: 7,
+  }));
+
+  // Not valid
 
   assert(
-    !isEqualRange(orderNumber, {
+    !isEqualRange(orderNumber, getSuccessorNumber, {
       kind: "open",
       start: 3,
     }, {
@@ -388,25 +474,60 @@ Deno.test("isEqualRange", () => {
   );
 
   assert(
-    !isEqualRange(orderNumber, {
-      kind: "closed",
+    !isEqualRange(orderNumber, getSuccessorNumber, {
+      kind: "open",
+      start: 3,
+    }, {
+      kind: "closed_exclusive",
+      start: 3,
+      end: 6,
+    }),
+  );
+
+  assert(
+    !isEqualRange(orderNumber, getSuccessorNumber, {
+      kind: "open",
+      start: 3,
+    }, {
+      kind: "closed_inclusive",
+      start: 3,
+      end: 6,
+    }),
+  );
+
+  assert(
+    !isEqualRange(orderNumber, getSuccessorNumber, {
+      kind: "closed_exclusive",
       start: 3,
       end: 6,
     }, {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: 2,
       end: 6,
     }),
   );
 
   assert(
-    !isEqualRange(orderNumber, {
-      kind: "open",
-      start: 3,
-    }, {
-      kind: "closed",
+    !isEqualRange(orderNumber, getSuccessorNumber, {
+      kind: "closed_exclusive",
       start: 3,
       end: 6,
+    }, {
+      kind: "closed_inclusive",
+      start: 3,
+      end: 6,
+    }),
+  );
+
+  assert(
+    !isEqualRange(orderNumber, getSuccessorNumber, {
+      kind: "closed_inclusive",
+      start: 3,
+      end: 6,
+    }, {
+      kind: "closed_inclusive",
+      start: 3,
+      end: 7,
     }),
   );
 });

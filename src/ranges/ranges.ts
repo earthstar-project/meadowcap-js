@@ -1,9 +1,15 @@
+import { SuccessorFn, TotalOrder } from "../order/types.ts";
 import { orderBytes, orderTimestamps } from "../orders.ts";
 import { incrementLeft, incrementRight } from "../successors.ts";
-import { Range, RangeOrder, ThreeDimensionalRange } from "./types.ts";
+import {
+  ClosedRange,
+  Range,
+  RangeOrder,
+  ThreeDimensionalRange,
+} from "./types.ts";
 
 export function isValidRange<ValueType>(
-  order: (a: ValueType, b: ValueType) => -1 | 0 | 1,
+  order: TotalOrder<ValueType>,
   range: Range<ValueType>,
 ) {
   if (range.kind === "closed_exclusive") {
@@ -24,7 +30,7 @@ export function isValidRange<ValueType>(
 }
 
 export function isValid3dRange<SubspaceIdType>(
-  orderSubspace: (a: SubspaceIdType, b: SubspaceIdType) => -1 | 0 | 1,
+  orderSubspace: TotalOrder<SubspaceIdType>,
   range: ThreeDimensionalRange<SubspaceIdType>,
 ) {
   const [timestampRange, pathRange, subspaceRange] = range;
@@ -59,9 +65,36 @@ function orderPair<ValueType>(a: Range<ValueType>, b: Range<ValueType>) {
   return [a, b];
 }
 
+export function getSmallerClosedRange<ValueType>(
+  { getSuccessor, isInclusiveSmaller }: {
+    getSuccessor: SuccessorFn<ValueType>;
+    isInclusiveSmaller: (inclusive: ValueType, exclusive: ValueType) => boolean;
+  },
+  inclusiveRange: {
+    kind: "closed_inclusive";
+    start: ValueType;
+    end: ValueType;
+  },
+): ClosedRange<ValueType> {
+  const exclusiveEnd = getSuccessor(inclusiveRange.end);
+
+  if (isInclusiveSmaller(inclusiveRange.end, exclusiveEnd)) {
+    return inclusiveRange;
+  }
+
+  return {
+    kind: "closed_exclusive",
+    start: inclusiveRange.start,
+    end: exclusiveEnd,
+  };
+}
+
 export function intersectRanges<ValueType>(
-  order: (a: ValueType, b: ValueType) => -1 | 0 | 1,
-  getSuccessor: (value: ValueType) => ValueType,
+  { order, getSuccessor, isInclusiveSmaller }: {
+    order: TotalOrder<ValueType>;
+    getSuccessor: SuccessorFn<ValueType>;
+    isInclusiveSmaller: (inclusive: ValueType, exclusive: ValueType) => boolean;
+  },
   a: Range<ValueType>,
   b: Range<ValueType>,
 ): Range<ValueType> | null {
@@ -98,11 +131,11 @@ export function intersectRanges<ValueType>(
     if (aStartBStartOrder <= 0) {
       return y;
     } else if (aStartBStartOrder > 0 && aStartBEndOrder <= 0) {
-      return {
-        kind: "closed_exclusive",
+      return getSmallerClosedRange({ getSuccessor, isInclusiveSmaller }, {
+        kind: "closed_inclusive",
         start: x.start,
-        end: getSuccessor(y.end),
-      };
+        end: y.end,
+      });
     }
 
     return null;
@@ -112,49 +145,88 @@ export function intersectRanges<ValueType>(
     const min = order(x.start, y.start) < 0 ? x : y;
     const max = min === x ? y : x;
 
-    if (order(min.end, max.start) < 0) {
+    // reject if min's end is lte max's start
+    if (order(min.end, max.start) <= 0) {
       return null;
     }
 
-    const endOrder = order(min.end, max.end);
-
-    const end = endOrder === -1 ? min.end : max.end;
-
-    if (order(max.start, end) > -1) {
+    // reject if max's start is gte min's end
+    if (order(max.start, min.end) >= 0) {
       return null;
     }
 
     return {
       kind: "closed_exclusive",
       start: max.start,
-      end: min.end < max.end ? min.end : max.end,
+      end: order(min.end, max.end) < 0 ? min.end : max.end,
     };
   } else if (x.kind === "closed_exclusive" && y.kind === "closed_inclusive") {
-    const z = {
-      ...y,
-      kind: "closed_exclusive",
-      end: getSuccessor(y.end),
-    };
+    const min = order(x.start, y.start) < 0 ? x : y;
+    const max = min === x ? y : x;
 
-    const min = order(x.start, z.start) < 0 ? x : z;
-    const max = min === x ? z : x;
-
-    if (order(min.end, max.start) < 0) {
-      return null;
+    if (min.kind === "closed_exclusive") {
+      // reject if min's end come's is lte max's start
+      if (order(min.end, max.start) <= 0) {
+        return null;
+      }
+    } else {
+      // reject if min's end come's is lt max's start
+      if (order(min.end, max.start) < 0) {
+        return null;
+      }
     }
 
-    const endOrder = order(min.end, max.end);
+    if (min.kind === "closed_inclusive" && order(min.end, max.start) === 0) {
+      return getSmallerClosedRange({ getSuccessor, isInclusiveSmaller }, {
+        kind: "closed_inclusive",
+        start: min.end,
+        end: min.end,
+      });
+    }
 
-    const end = endOrder === -1 ? min.end : max.end;
+    if (max.kind === "closed_exclusive") {
+      // reject if max's start comes is gte min's end
+      if (order(max.start, min.end) >= 0) {
+        return null;
+      }
+    } else {
+      if (order(max.start, min.end) > 0) {
+        return null;
+      }
+    }
 
-    if (order(max.start, end) > -1) {
-      return null;
+    const endOrder = min.kind === "closed_exclusive"
+      ? order(min.end, getSuccessor(max.end))
+      : order(getSuccessor(min.end), max.end);
+
+    if (min.kind === "closed_exclusive") {
+      if (endOrder < 0) {
+        return {
+          kind: "closed_exclusive",
+          start: max.start,
+          end: min.end,
+        };
+      } else {
+        return getSmallerClosedRange({ getSuccessor, isInclusiveSmaller }, {
+          kind: "closed_inclusive",
+          start: max.start,
+          end: max.end,
+        });
+      }
+    }
+
+    if (endOrder < 0) {
+      return getSmallerClosedRange({ getSuccessor, isInclusiveSmaller }, {
+        kind: "closed_inclusive",
+        start: max.start,
+        end: min.end,
+      });
     }
 
     return {
       kind: "closed_exclusive",
       start: max.start,
-      end: min.end < max.end ? min.end : max.end,
+      end: max.end,
     };
   } else if (x.kind === "closed_inclusive" && y.kind === "closed_inclusive") {
     const min = order(x.start, y.start) < 0 ? x : y;
@@ -165,11 +237,11 @@ export function intersectRanges<ValueType>(
     }
 
     if (order(min.end, max.start) === 0) {
-      return {
-        kind: "closed_exclusive",
+      return getSmallerClosedRange({ getSuccessor, isInclusiveSmaller }, {
+        kind: "closed_inclusive",
         start: min.end,
-        end: getSuccessor(min.end),
-      };
+        end: min.end,
+      });
     }
 
     const endOrder = order(min.end, max.end);
@@ -180,22 +252,25 @@ export function intersectRanges<ValueType>(
       return null;
     }
 
-    return {
-      kind: "closed_exclusive",
+    return getSmallerClosedRange({ getSuccessor, isInclusiveSmaller }, {
+      kind: "closed_inclusive",
       start: max.start,
-      end: getSuccessor(min.end < max.end ? min.end : max.end),
-    };
+      end: min.end < max.end ? min.end : max.end,
+    });
   }
 
   return null;
 }
 
 export function intersect3dRanges<SubspaceIdType>(
-  order: (
-    a: SubspaceIdType,
-    b: SubspaceIdType,
-  ) => -1 | 0 | 1,
-  getSubspaceSuccessor: (value: SubspaceIdType) => SubspaceIdType,
+  { orderSubspace, getSuccessorSubspace, isInclusiveSmaller }: {
+    orderSubspace: TotalOrder<SubspaceIdType>;
+    getSuccessorSubspace: SuccessorFn<SubspaceIdType>;
+    isInclusiveSmaller: (
+      inclusiveSubspaceId: SubspaceIdType,
+      exclusiveSubspaceId: SubspaceIdType,
+    ) => boolean;
+  },
   a: ThreeDimensionalRange<SubspaceIdType>,
   b: ThreeDimensionalRange<SubspaceIdType>,
 ): ThreeDimensionalRange<SubspaceIdType> | null {
@@ -203,8 +278,11 @@ export function intersect3dRanges<SubspaceIdType>(
   const [timestampRangeB, pathRangeB, subspaceRangeB] = b;
 
   const timestampIntersection = intersectRanges(
-    orderTimestamps,
-    incrementLeft,
+    {
+      order: orderTimestamps,
+      getSuccessor: incrementLeft,
+      isInclusiveSmaller: () => false,
+    },
     timestampRangeA,
     timestampRangeB,
   );
@@ -214,8 +292,13 @@ export function intersect3dRanges<SubspaceIdType>(
   }
 
   const pathIntersection = intersectRanges(
-    orderBytes,
-    incrementRight,
+    {
+      order: orderBytes,
+      getSuccessor: incrementRight,
+      isInclusiveSmaller: (inclusive, exclusive) => {
+        return inclusive.byteLength < exclusive.byteLength;
+      },
+    },
     pathRangeA,
     pathRangeB,
   );
@@ -225,8 +308,11 @@ export function intersect3dRanges<SubspaceIdType>(
   }
 
   const subspaceIntersection = intersectRanges(
-    order,
-    getSubspaceSuccessor,
+    {
+      order: orderSubspace,
+      getSuccessor: getSuccessorSubspace,
+      isInclusiveSmaller,
+    },
     subspaceRangeA,
     subspaceRangeB,
   );

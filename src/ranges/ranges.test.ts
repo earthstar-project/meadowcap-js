@@ -122,7 +122,7 @@ function getNumbersOfRange(range: Range<number>, maxSize: number): Set<number> {
   const numbers = new Set<number>();
 
   if (range.kind === "open") {
-    for (let i = range.start; i < maxSize; i++) {
+    for (let i = range.start; i <= maxSize; i++) {
       numbers.add(i);
     }
   } else if (range.kind === "closed_exclusive") {
@@ -139,9 +139,11 @@ function getNumbersOfRange(range: Range<number>, maxSize: number): Set<number> {
 }
 
 Deno.test("intersectRanges", () => {
-  for (let i = 0; i < 100; i++) {
-    const startA = Math.floor(Math.random() * 49);
-    const startB = Math.floor(Math.random() * 49);
+  const MAX_SIZE = 49;
+
+  for (let i = 0; i < 1000; i++) {
+    const startA = Math.floor(Math.random() * MAX_SIZE);
+    const startB = Math.floor(Math.random() * MAX_SIZE);
 
     const aRoll = Math.random();
     const bRoll = Math.random();
@@ -166,12 +168,12 @@ Deno.test("intersectRanges", () => {
       ? {
         kind: "closed_exclusive",
         start: startA,
-        end: Math.floor(Math.random() * (49 - startA + 1) + startA + 1),
+        end: Math.floor(Math.random() * (MAX_SIZE - startA + 1) + startA + 1),
       }
       : {
         kind: "closed_inclusive",
         start: startA,
-        end: Math.floor(Math.random() * (48 - startA + 1) + startA + 1),
+        end: Math.floor(Math.random() * (MAX_SIZE - startA + 1) + startA + 1),
       };
 
     const bRange: Range<number> = bType === "open"
@@ -183,36 +185,57 @@ Deno.test("intersectRanges", () => {
       ? {
         kind: "closed_exclusive",
         start: startB,
-        end: Math.floor(Math.random() * (49 - startB + 1) + startB + 1),
+        end: Math.floor(Math.random() * (MAX_SIZE - startB + 1) + startB + 1),
       }
       : {
         kind: "closed_inclusive",
         start: startB,
-        end: Math.floor(Math.random() * (48 - startB + 1) + startB + 1),
+        end: Math.floor(Math.random() * (MAX_SIZE - startB + 1) + startB + 1),
       };
 
     // get results from new range
 
     const intersectedRange = intersectRanges(
-      orderNumber,
-      getSuccessorNumber,
+      {
+        order: orderNumber,
+        getSuccessor: getSuccessorNumber,
+        isInclusiveSmaller: (a, b) => a < b,
+      },
       aRange,
       bRange,
     );
 
-    const aRangeNumbers = getNumbersOfRange(aRange, 50);
-    const bRangeNumbers = getNumbersOfRange(bRange, 50);
+    const aRangeNumbers = getNumbersOfRange(aRange, MAX_SIZE + 1);
+    const bRangeNumbers = getNumbersOfRange(bRange, MAX_SIZE + 1);
 
     if (intersectedRange === null) {
       // Check that none of the numbers in one is in the other.
+      console.log({
+        aRange,
+        bRange,
+        aRangeNumbers,
+        bRangeNumbers,
+      });
 
       for (const numA of aRangeNumbers) {
         if (bRangeNumbers.has(numA)) {
-          assert(false, "Found common number when there should be none");
+          assert(false, "Got no intersection when there should be one");
         }
       }
     } else {
-      const intersectedNumbers = getNumbersOfRange(intersectedRange, 50);
+      const intersectedNumbers = getNumbersOfRange(
+        intersectedRange,
+        MAX_SIZE + 1,
+      );
+
+      console.log({
+        aRange,
+        bRange,
+        intersectedRange,
+        aRangeNumbers,
+        bRangeNumbers,
+        intersectedNumbers,
+      });
 
       for (const numA of aRangeNumbers) {
         if (bRangeNumbers.has(numA)) {
@@ -289,8 +312,11 @@ Deno.test("intersect3dRanges", () => {
 
   assertThrows(() => {
     intersect3dRanges(
-      orderNumber,
-      getSuccessorNumber,
+      {
+        orderSubspace: orderNumber,
+        getSuccessorSubspace: getSuccessorNumber,
+        isInclusiveSmaller: (a, b) => a < b,
+      },
       nonsenseRange,
       openRange,
     );
@@ -341,8 +367,11 @@ Deno.test("intersect3dRanges", () => {
   ];
 
   const res1 = intersect3dRanges(
-    orderNumber,
-    getSuccessorNumber,
+    {
+      orderSubspace: orderNumber,
+      getSuccessorSubspace: getSuccessorNumber,
+      isInclusiveSmaller: (a, b) => a < b,
+    },
     range1,
     range2,
   );
@@ -389,8 +418,11 @@ Deno.test("intersect3dRanges", () => {
   ];
 
   const res2 = intersect3dRanges(
-    orderNumber,
-    getSuccessorNumber,
+    {
+      orderSubspace: orderNumber,
+      getSuccessorSubspace: getSuccessorNumber,
+      isInclusiveSmaller: (a, b) => a < b,
+    },
     range3,
     range4,
   );

@@ -1,12 +1,4 @@
-/**
-A range is either closed, consisting of a start value and an end value, or it is open, consisting only of a start value.
-
-A closed range includes all values greater than or equal to the start value and strictly less than the end value. An open range includes all values greater than or equal to the start value.
-*/
-export type Range<ValueType> = {
-  kind: "open";
-  start: ValueType;
-} | {
+export type ClosedRange<ValueType> = {
   kind: "closed_exclusive";
   start: ValueType;
   end: ValueType;
@@ -15,6 +7,16 @@ export type Range<ValueType> = {
   start: ValueType;
   end: ValueType;
 };
+
+/**
+A range is either closed, consisting of a start value and an end value, or it is open, consisting only of a start value.
+
+A closed range includes all values greater than or equal to the start value and strictly less than the end value. An open range includes all values greater than or equal to the start value.
+*/
+export type Range<ValueType> = {
+  kind: "open";
+  start: ValueType;
+} | ClosedRange<ValueType>;
 
 /**
 A 3d product consists of a set of time ranges, a set of path ranges and a set of subspace ranges.

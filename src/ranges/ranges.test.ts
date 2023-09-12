@@ -198,6 +198,7 @@ Deno.test("intersectRanges", () => {
     const intersectedRange = intersectRanges(
       {
         order: orderNumber,
+        getPredecessor: getPredecessorNumber,
         getSuccessor: getSuccessorNumber,
         isInclusiveSmaller: (a, b) => a < b,
       },
@@ -210,12 +211,6 @@ Deno.test("intersectRanges", () => {
 
     if (intersectedRange === null) {
       // Check that none of the numbers in one is in the other.
-      console.log({
-        aRange,
-        bRange,
-        aRangeNumbers,
-        bRangeNumbers,
-      });
 
       for (const numA of aRangeNumbers) {
         if (bRangeNumbers.has(numA)) {
@@ -227,15 +222,6 @@ Deno.test("intersectRanges", () => {
         intersectedRange,
         MAX_SIZE + 1,
       );
-
-      console.log({
-        aRange,
-        bRange,
-        intersectedRange,
-        aRangeNumbers,
-        bRangeNumbers,
-        intersectedNumbers,
-      });
 
       for (const numA of aRangeNumbers) {
         if (bRangeNumbers.has(numA)) {
@@ -314,6 +300,7 @@ Deno.test("intersect3dRanges", () => {
     intersect3dRanges(
       {
         orderSubspace: orderNumber,
+        getPredecessorSubspace: getPredecessorNumber,
         getSuccessorSubspace: getSuccessorNumber,
         isInclusiveSmaller: (a, b) => a < b,
       },
@@ -369,6 +356,7 @@ Deno.test("intersect3dRanges", () => {
   const res1 = intersect3dRanges(
     {
       orderSubspace: orderNumber,
+      getPredecessorSubspace: getPredecessorNumber,
       getSuccessorSubspace: getSuccessorNumber,
       isInclusiveSmaller: (a, b) => a < b,
     },
@@ -420,6 +408,7 @@ Deno.test("intersect3dRanges", () => {
   const res2 = intersect3dRanges(
     {
       orderSubspace: orderNumber,
+      getPredecessorSubspace: getPredecessorNumber,
       getSuccessorSubspace: getSuccessorNumber,
       isInclusiveSmaller: (a, b) => a < b,
     },
@@ -439,9 +428,9 @@ Deno.test("intersect3dRanges", () => {
       end: pathT,
     },
     {
-      kind: "closed_exclusive",
+      kind: "closed_inclusive",
       start: 2,
-      end: 4,
+      end: 3,
     },
   ]);
 
@@ -450,6 +439,10 @@ Deno.test("intersect3dRanges", () => {
 
 function getSuccessorNumber(num: number): number {
   return num + 1;
+}
+
+function getPredecessorNumber(num: number): number {
+  return Math.max(0, num - 1);
 }
 
 Deno.test("isEqualRange", () => {

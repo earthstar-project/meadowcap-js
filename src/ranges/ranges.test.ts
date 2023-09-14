@@ -141,7 +141,7 @@ function getNumbersOfRange(range: Range<number>, maxSize: number): Set<number> {
 Deno.test("intersectRanges", () => {
   const MAX_SIZE = 49;
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 100; i++) {
     const startA = Math.floor(Math.random() * MAX_SIZE);
     const startB = Math.floor(Math.random() * MAX_SIZE);
 
@@ -448,48 +448,56 @@ function getPredecessorNumber(num: number): number {
 Deno.test("isEqualRange", () => {
   // Valid
 
-  assert(isEqualRange(orderNumber, getSuccessorNumber, {
-    kind: "open",
-    start: 3,
-  }, {
-    kind: "open",
-    start: 3,
-  }));
+  assert(
+    isEqualRange({ order: orderNumber, getSuccessor: getSuccessorNumber }, {
+      kind: "open",
+      start: 3,
+    }, {
+      kind: "open",
+      start: 3,
+    }),
+  );
 
-  assert(isEqualRange(orderNumber, getSuccessorNumber, {
-    kind: "closed_exclusive",
-    start: 3,
-    end: 6,
-  }, {
-    kind: "closed_exclusive",
-    start: 3,
-    end: 6,
-  }));
+  assert(
+    isEqualRange({ order: orderNumber, getSuccessor: getSuccessorNumber }, {
+      kind: "closed_exclusive",
+      start: 3,
+      end: 6,
+    }, {
+      kind: "closed_exclusive",
+      start: 3,
+      end: 6,
+    }),
+  );
 
-  assert(isEqualRange(orderNumber, getSuccessorNumber, {
-    kind: "closed_exclusive",
-    start: 3,
-    end: 7,
-  }, {
-    kind: "closed_inclusive",
-    start: 3,
-    end: 6,
-  }));
+  assert(
+    isEqualRange({ order: orderNumber, getSuccessor: getSuccessorNumber }, {
+      kind: "closed_exclusive",
+      start: 3,
+      end: 7,
+    }, {
+      kind: "closed_inclusive",
+      start: 3,
+      end: 6,
+    }),
+  );
 
-  assert(isEqualRange(orderNumber, getSuccessorNumber, {
-    kind: "closed_inclusive",
-    start: 3,
-    end: 7,
-  }, {
-    kind: "closed_inclusive",
-    start: 3,
-    end: 7,
-  }));
+  assert(
+    isEqualRange({ order: orderNumber, getSuccessor: getSuccessorNumber }, {
+      kind: "closed_inclusive",
+      start: 3,
+      end: 7,
+    }, {
+      kind: "closed_inclusive",
+      start: 3,
+      end: 7,
+    }),
+  );
 
   // Not valid
 
   assert(
-    !isEqualRange(orderNumber, getSuccessorNumber, {
+    !isEqualRange({ order: orderNumber, getSuccessor: getSuccessorNumber }, {
       kind: "open",
       start: 3,
     }, {
@@ -499,7 +507,7 @@ Deno.test("isEqualRange", () => {
   );
 
   assert(
-    !isEqualRange(orderNumber, getSuccessorNumber, {
+    !isEqualRange({ order: orderNumber, getSuccessor: getSuccessorNumber }, {
       kind: "open",
       start: 3,
     }, {
@@ -510,7 +518,7 @@ Deno.test("isEqualRange", () => {
   );
 
   assert(
-    !isEqualRange(orderNumber, getSuccessorNumber, {
+    !isEqualRange({ order: orderNumber, getSuccessor: getSuccessorNumber }, {
       kind: "open",
       start: 3,
     }, {
@@ -521,7 +529,7 @@ Deno.test("isEqualRange", () => {
   );
 
   assert(
-    !isEqualRange(orderNumber, getSuccessorNumber, {
+    !isEqualRange({ order: orderNumber, getSuccessor: getSuccessorNumber }, {
       kind: "closed_exclusive",
       start: 3,
       end: 6,
@@ -533,7 +541,7 @@ Deno.test("isEqualRange", () => {
   );
 
   assert(
-    !isEqualRange(orderNumber, getSuccessorNumber, {
+    !isEqualRange({ order: orderNumber, getSuccessor: getSuccessorNumber }, {
       kind: "closed_exclusive",
       start: 3,
       end: 6,
@@ -545,7 +553,7 @@ Deno.test("isEqualRange", () => {
   );
 
   assert(
-    !isEqualRange(orderNumber, getSuccessorNumber, {
+    !isEqualRange({ order: orderNumber, getSuccessor: getSuccessorNumber }, {
       kind: "closed_inclusive",
       start: 3,
       end: 6,

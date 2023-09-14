@@ -54,7 +54,11 @@ export function isValid3dRange<SubspaceIdType>(
   return true;
 }
 
-function orderPair<ValueType>(a: Range<ValueType>, b: Range<ValueType>) {
+/** Order a given pair of ranges by their type. Useful for functions using boolean logic based on the different combinations of range types. */
+export function orderRangePair<ValueType>(
+  a: Range<ValueType>,
+  b: Range<ValueType>,
+) {
   if (a.kind === b.kind) {
     return [a, b];
   }
@@ -122,30 +126,37 @@ export function intersectRanges<ValueType>(
     order: TotalOrder<ValueType>;
     getPredecessor: PredecessorFn<ValueType>;
     getSuccessor: SuccessorFn<ValueType>;
-
     isInclusiveSmaller: (inclusive: ValueType, exclusive: ValueType) => boolean;
   },
   a: Range<ValueType>,
   b: Range<ValueType>,
 ): Range<ValueType> | null {
   if (!isValidRange(order, a) || !isValidRange(order, b)) {
-    throw new Error("Non-sensible ranges given");
+    throw new Error("Invalid ranges given");
   }
 
-  const [x, y] = orderPair(a, b);
+  const [x, y] = orderRangePair(a, b);
 
   if (x.kind === "open" && y.kind === "open") {
     return {
       kind: "open",
       start: order(x.start, y.start) <= 0 ? y.start : x.start,
     };
-  } else if (x.kind === "open" && y.kind === "closed_exclusive") {
+  } else if (
+    x.kind === "open" &&
+    y.kind === "closed_exclusive"
+  ) {
     const aStartBStartOrder = order(x.start, y.start);
     const aStartBEndOrder = order(x.start, y.end);
 
     if (aStartBStartOrder <= 0) {
-      return y;
-    } else if (aStartBStartOrder > 0 && aStartBEndOrder < 0) {
+      return getSmallerFromExclusiveRange({
+        getPredecessor,
+        isInclusiveSmaller,
+      }, y);
+    } else if (
+      aStartBStartOrder > 0 && aStartBEndOrder < 0
+    ) {
       return getSmallerFromExclusiveRange({
         getPredecessor,
         isInclusiveSmaller,
@@ -395,12 +406,14 @@ export function intersect3dRanges<SubspaceIdType>(
 }
 
 export function isEqualRange<ValueType>(
-  order: (a: ValueType, b: ValueType) => -1 | 0 | 1,
-  getSuccessor: (value: ValueType) => ValueType,
+  { order, getSuccessor }: {
+    order: TotalOrder<ValueType>;
+    getSuccessor: SuccessorFn<ValueType>;
+  },
   a: Range<ValueType>,
   b: Range<ValueType>,
 ) {
-  const [x, y] = orderPair(a, b);
+  const [x, y] = orderRangePair(a, b);
 
   if (x.kind === "open" && y.kind === "open") {
     const startOrder = order(a.start, b.start);

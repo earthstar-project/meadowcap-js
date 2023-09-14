@@ -25,6 +25,12 @@ Deno.test("successorTimestamp", () => {
     const expected = new Uint8Array([255, 255, 255, 255]);
     assertEquals(successorTimestamp(bytes), expected);
   }
+
+  {
+    const bytes = new Uint8Array([0, 0, 7, 8]);
+    const expected = new Uint8Array([0, 0, 7, 9]);
+    assertEquals(successorTimestamp(bytes), expected);
+  }
 });
 
 Deno.test("successorPath", () => {

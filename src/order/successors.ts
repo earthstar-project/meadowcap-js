@@ -19,6 +19,7 @@ export function successorTimestamp(bytes: Uint8Array): Uint8Array {
     return bytes;
   } else {
     newBytes.set([last + 1], bytes.byteLength - 1);
+    newBytes.set(bytes.slice(0, bytes.byteLength - 1), 0);
 
     return newBytes;
   }

@@ -1,18 +1,21 @@
-import { assert, assertEquals, assertThrows } from "$std/assert/mod.ts";
+import { assert } from "$std/assert/assert.ts";
+import { assertEquals } from "$std/assert/assert_equals.ts";
+import { assertThrows } from "$std/assert/assert_throws.ts";
+import {
+  getSmallerFromExclusiveRange,
+  getSmallerFromInclusiveRange,
+} from "../ranges/ranges.ts";
+import { Range, ThreeDimensionalRange } from "../ranges/types.ts";
 import {
   addTo3dProduct,
-  addToDisjointRange,
-  DisjointRange,
+  addToDisjointIntervalCanonically,
   intersect3dProducts,
-  intersectDisjointRanges,
-  isEqualDisjointRange,
-  isSensible3dProduct,
-  isSensibleDisjointRange,
+  intersectDisjointIntervals,
+  isEqualDisjointInterval,
   merge3dProducts,
   mergeDisjointRanges,
-  ThreeDimensionalProduct,
 } from "./products.ts";
-import { Range, ThreeDimensionalRange } from "./ranges.ts";
+import { DisjointInterval, ThreeDimensionalProduct } from "./types.ts";
 
 function orderNumber(a: number, b: number) {
   if (a > b) {
@@ -31,22 +34,47 @@ function getNumbers(size: number, startAt = 0) {
 }
 
 function getNumbersOfDisjointRange(
-  disjointRange: DisjointRange<number>,
+  disjointRange: DisjointInterval<number>,
   max: number,
+  throwOnHas?: boolean,
 ) {
   const numbers = new Set<number>();
 
   for (const range of disjointRange) {
     if (range.kind === "open") {
-      const numbersOfRange = getNumbers(max - range.start, range.start);
+      for (let i = range.start; i <= max; i++) {
+        if (throwOnHas && numbers.has(i)) {
+          throw new Error("Tried to add number we already had");
+        }
 
-      for (const num of numbersOfRange) {
+        numbers.add(i);
+      }
+    } else if (range.kind === "closed_exclusive") {
+      const rangeNumbers = getNumbers(range.end - range.start, range.start);
+
+      if (throwOnHas && rangeNumbers.length === 0) {
+        throw new Error("Tried to get numbers from empty range");
+      }
+
+      for (const num of rangeNumbers) {
+        if (throwOnHas && numbers.has(num)) {
+          throw new Error("Tried to add number we already had");
+        }
+
         numbers.add(num);
       }
     } else {
-      const numbersOfRange = getNumbers(range.end - range.start, range.start);
+      const rangeNumbers = getNumbers(range.end - range.start + 1, range.start);
 
-      for (const num of numbersOfRange) {
+      if (throwOnHas && rangeNumbers.length === 0) {
+        throw new Error("Tried to get numbers from empty range");
+      }
+
+      for (const num of rangeNumbers) {
+        if (throwOnHas && numbers.has(num)) {
+          throw new Error("Tried to add number we already had");
+        }
+
         numbers.add(num);
       }
     }
@@ -56,130 +84,92 @@ function getNumbersOfDisjointRange(
 }
 
 Deno.test("getNumbersOfDisjointRange", () => {
-  const dr1: DisjointRange<number> = [
-    { kind: "closed", start: 8, end: 12 },
-    { kind: "closed", start: 1, end: 3 },
+  const dr1: DisjointInterval<number> = [
+    { kind: "closed_exclusive", start: 8, end: 12 },
+    { kind: "closed_inclusive", start: 1, end: 3 },
   ];
 
   const res1 = getNumbersOfDisjointRange(dr1, 11);
 
-  assertEquals(Array.from(res1).toSorted(orderNumber), [1, 2, 8, 9, 10, 11]);
+  assertEquals(Array.from(res1).toSorted(orderNumber), [1, 2, 3, 8, 9, 10, 11]);
 
-  const dr2: DisjointRange<number> = [
+  const dr2: DisjointInterval<number> = [
     { kind: "open", start: 8 },
-    { kind: "closed", start: 3, end: 5 },
+    { kind: "closed_exclusive", start: 3, end: 5 },
   ];
 
   const res2 = getNumbersOfDisjointRange(dr2, 9);
 
-  assertEquals(Array.from(res2).toSorted(orderNumber), [3, 4, 8]);
-});
-
-Deno.test("isSensibleDisjointRange", () => {
-  const dr1: DisjointRange<number> = [
-    { kind: "closed", start: 8, end: 12 },
-    { kind: "closed", start: 1, end: 3 },
-    { kind: "open", start: 15 },
-  ];
-
-  assert(isSensibleDisjointRange(orderNumber, dr1));
-
-  const dr2: DisjointRange<number> = [
-    { kind: "closed", start: 1, end: 1 },
-  ];
-
-  assert(!isSensibleDisjointRange(orderNumber, dr2));
-
-  const dr3: DisjointRange<number> = [
-    { kind: "closed", start: 5, end: 0 },
-  ];
-
-  assert(!isSensibleDisjointRange(orderNumber, dr3));
-
-  const dr4: DisjointRange<number> = [
-    { kind: "open", start: 1 },
-    { kind: "open", start: 15 },
-  ];
-
-  assert(!isSensibleDisjointRange(orderNumber, dr4));
-
-  const dr5: DisjointRange<number> = [
-    { kind: "open", start: 4 },
-    { kind: "closed", start: 4, end: 12 },
-  ];
-
-  assert(!isSensibleDisjointRange(orderNumber, dr5));
-
-  const dr6: DisjointRange<number> = [
-    { kind: "closed", start: 1, end: 10 },
-    { kind: "open", start: 4 },
-  ];
-
-  assert(!isSensibleDisjointRange(orderNumber, dr6));
-
-  const dr7: DisjointRange<number> = [
-    { kind: "closed", start: 1, end: 10 },
-    { kind: "closed", start: 10, end: 14 },
-  ];
-
-  assert(!isSensibleDisjointRange(orderNumber, dr7));
-
-  const dr8: DisjointRange<number> = [
-    { kind: "closed", start: 3, end: 8 },
-    { kind: "closed", start: 7, end: 10 },
-  ];
-
-  assert(!isSensibleDisjointRange(orderNumber, dr8));
-
-  const dr9: DisjointRange<number> = [
-    { kind: "closed", start: 1, end: 10 },
-    { kind: "closed", start: 3, end: 8 },
-  ];
-
-  assert(!isSensibleDisjointRange(orderNumber, dr9));
+  assertEquals(Array.from(res2).toSorted(orderNumber), [3, 4, 8, 9]);
 });
 
 Deno.test("addToDisjointRange", () => {
-  // TODO: Test throws on insensible range / insensible product.
-
   for (let i = 0; i < 100; i++) {
-    let disjointRange: DisjointRange<number> = [];
+    let disjointRange: DisjointInterval<number> = [];
+    const forceInclusive = Math.random() >= 0.5;
+
+    const MAX_SIZE = 100;
 
     for (let j = 0; j < 10; j++) {
-      const expectedNumbers = getNumbersOfDisjointRange(disjointRange, 100);
+      const expectedNumbers = getNumbersOfDisjointRange(
+        disjointRange,
+        MAX_SIZE,
+      );
 
-      const isOpen = Math.random() >= 0.5;
+      const rangeKindRoll = Math.random();
 
-      const newStart = Math.floor(Math.random() * 50);
+      const rangeKind = rangeKindRoll >= 0.95
+        ? "open"
+        : rangeKindRoll >= 0.45
+        ? "closed_exclusive"
+        : "closed_inclusive";
 
-      const newRange: Range<number> = isOpen
+      const newStart = Math.floor(Math.random() * MAX_SIZE);
+
+      const newRange: Range<number> = rangeKind === "open"
         ? {
           kind: "open",
           start: newStart,
         }
-        : {
-          kind: "closed",
+        : rangeKind === "closed_exclusive" && !forceInclusive
+        ? {
+          kind: "closed_exclusive",
           start: newStart,
-          end: newStart + Math.floor(Math.random() * (50 - 1) + 1),
+          end: Math.floor(
+            Math.random() * (MAX_SIZE - newStart) + newStart + 1,
+          ),
+        }
+        : {
+          kind: "closed_inclusive",
+          start: newStart,
+          end: Math.floor(
+            Math.random() * (MAX_SIZE - newStart) + newStart + 1,
+          ),
         };
 
-      const newNumbers = getNumbersOfDisjointRange([newRange], 100);
+      const newNumbers = getNumbersOfDisjointRange([newRange], MAX_SIZE);
 
       for (const num of newNumbers) {
         expectedNumbers.add(num);
       }
 
-      const newDisjointRange = addToDisjointRange(
-        orderNumber,
+      const newDisjointRange = addToDisjointIntervalCanonically(
+        {
+          getSuccessor: (num) => num + 1,
+          getPredecessor: (num) => num - 1,
+          order: orderNumber,
+          isInclusiveSmaller: () => false,
+          forceInclusive,
+        },
         newRange,
         disjointRange,
       );
 
-      assert(isSensibleDisjointRange(orderNumber, newDisjointRange));
-
       const newDisjointRangeNumbers = getNumbersOfDisjointRange(
         newDisjointRange,
-        100,
+        MAX_SIZE,
+        // Throw if the same number is added twice (overlap)
+        true,
       );
 
       assertEquals(
@@ -187,13 +177,64 @@ Deno.test("addToDisjointRange", () => {
         Array.from(newDisjointRangeNumbers).toSorted(orderNumber),
       );
 
+      let openRangePresent = false;
+
+      // Check canonicity.
+      for (const range of newDisjointRange) {
+        if (range.kind === "open") {
+          if (openRangePresent) {
+            assert(false, "More than one open range");
+          } else {
+            openRangePresent = true;
+          }
+        }
+
+        if (range.kind === "closed_exclusive") {
+          if (forceInclusive) {
+            assert(false, "Exclusive range added when forceInclusive was true");
+          }
+
+          const smaller = getSmallerFromExclusiveRange({
+            getPredecessor: (num) => num - 1,
+            isInclusiveSmaller: () => false,
+          }, range);
+
+          if (!forceInclusive && smaller.kind === "closed_inclusive") {
+            assert(false, "Added a less efficient closed range");
+          }
+
+          for (const otherRange of disjointRange) {
+            if (orderNumber(otherRange.start, range.end) === 0) {
+              assert(false, "Adjacent range detected");
+            }
+          }
+        }
+
+        if (range.kind === "closed_inclusive") {
+          const smaller = getSmallerFromInclusiveRange({
+            getSuccessor: (num) => num + 1,
+            isInclusiveSmaller: () => false,
+          }, range);
+
+          if (!forceInclusive && smaller.kind === "closed_exclusive") {
+            assert(false, "Added a less efficient closed range");
+          }
+
+          for (const otherRange of disjointRange) {
+            if (orderNumber(otherRange.start, range.end + 1) === 0) {
+              assert(false, "Adjacent range detected");
+            }
+          }
+        }
+      }
+
       disjointRange = newDisjointRange;
     }
   }
 });
 
 function makeDisjointRange(maxSize: number) {
-  const dj: DisjointRange<number> = [];
+  const dj: DisjointInterval<number> = [];
   let rangeStart = 0;
 
   while (true) {
@@ -219,7 +260,7 @@ function makeDisjointRange(maxSize: number) {
     }
 
     dj.push({
-      kind: "closed",
+      kind: "closed_exclusive",
       start: rangeStart + startDelta,
       end: rangeStart + startDelta + size,
     });
@@ -236,21 +277,25 @@ function makeDisjointRange(maxSize: number) {
 
 Deno.test("intersectDisjointRange", () => {
   for (let i = 0; i < 100; i++) {
-    const dj1 = makeDisjointRange(200);
-    const dj2 = makeDisjointRange(200);
+    const di1 = makeDisjointRange(200);
+    const di2 = makeDisjointRange(200);
 
-    const intersection = intersectDisjointRanges(orderNumber, dj1, dj2);
+    const intersection = intersectDisjointIntervals(
+      {
+        getSuccessor: (num) => num + 1,
+        getPredecessor: (num) => num - 1,
+        order: orderNumber,
+        isInclusiveSmaller: () => false,
+      },
+      di1,
+      di2,
+    );
 
-    const numbers1 = getNumbersOfDisjointRange(dj1, 200);
-    const numbers2 = getNumbersOfDisjointRange(dj2, 200);
+    const numbers1 = getNumbersOfDisjointRange(di1, 200);
+    const numbers2 = getNumbersOfDisjointRange(di2, 200);
 
     if (intersection) {
       const intersectionNumbers = getNumbersOfDisjointRange(intersection, 200);
-
-      assert(
-        isSensibleDisjointRange(orderNumber, intersection),
-        `Non-sensible intersection detected`,
-      );
 
       for (const num1 of numbers1) {
         if (numbers2.has(num1)) {
@@ -267,211 +312,156 @@ Deno.test("intersectDisjointRange", () => {
   }
 });
 
-Deno.test("isSensible3dProduct", () => {
-  const sensibleProductEmpty: ThreeDimensionalProduct<number> = [
-    [],
-    [],
-    [],
-  ];
-
-  assert(isSensible3dProduct(orderNumber, sensibleProductEmpty));
-
-  const timestampOld = new Uint8Array(8);
-  const timestampOldView = new DataView(timestampOld.buffer);
-  timestampOldView.setBigUint64(0, BigInt(1000));
-
-  const timestampNew = new Uint8Array(8);
-  const timestampNewView = new DataView(timestampNew.buffer);
-  timestampNewView.setBigUint64(0, BigInt(3000));
-
-  const timestampNewer = new Uint8Array(8);
-  const timestampNewerView = new DataView(timestampNewer.buffer);
-  timestampNewerView.setBigUint64(0, BigInt(9000));
-
-  const pathA = new TextEncoder().encode("aaaa");
-  const pathG = new TextEncoder().encode("gggg");
-  const pathT = new TextEncoder().encode("tttt");
-
-  const sensibleProductNonEmpty: ThreeDimensionalProduct<number> = [
-    [
+Deno.test("isEqualDisjointInterval", () => {
+  assert(
+    isEqualDisjointInterval(
       {
-        kind: "closed",
-        start: timestampOld,
-        end: timestampNew,
+        order: orderNumber,
+        getSuccessor: (a) => a + 1,
       },
+      [],
+      [],
+    ),
+  );
+
+  assert(
+    isEqualDisjointInterval({
+      order: orderNumber,
+      getSuccessor: (a) => a + 1,
+    }, [
+      { kind: "open", start: 10 },
       {
-        kind: "open",
-        start: timestampNewer,
-      },
-    ],
-    [
-      {
-        kind: "closed",
-        start: pathA,
-        end: pathG,
-      },
-      {
-        kind: "open",
-        start: pathT,
-      },
-    ],
-    [
-      {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 1,
-        end: 3,
+        end: 5,
       },
+      { kind: "closed_exclusive", start: 7, end: 9 },
+    ], [
+      { kind: "open", start: 10 },
       {
-        kind: "open",
-        start: 7,
-      },
-    ],
-  ];
-
-  assert(isSensible3dProduct(orderNumber, sensibleProductNonEmpty));
-
-  const nonsenseProduct1: ThreeDimensionalProduct<number> = [
-    [],
-    [
-      {
-        kind: "closed",
-        start: pathA,
-        end: pathG,
-      },
-      {
-        kind: "open",
-        start: pathT,
-      },
-    ],
-    [
-      {
-        kind: "closed",
+        kind: "closed_inclusive",
         start: 1,
-        end: 3,
-      },
-      {
-        kind: "open",
-        start: 7,
-      },
-    ],
-  ];
-
-  assert(!isSensible3dProduct(orderNumber, nonsenseProduct1));
-
-  const nonsenseProduct2: ThreeDimensionalProduct<number> = [
-    [
-      {
-        kind: "closed",
-        start: timestampOld,
-        end: timestampNew,
-      },
-      {
-        kind: "open",
-        start: timestampNewer,
-      },
-    ],
-    [
-      {
-        kind: "closed",
-        start: pathA,
-        end: pathG,
-      },
-      {
-        kind: "open",
-        start: pathT,
-      },
-    ],
-    [
-      {
-        kind: "closed",
-        start: 1,
-        end: 9,
-      },
-      {
-        kind: "open",
-        start: 7,
-      },
-    ],
-  ];
-
-  assert(!isSensible3dProduct(orderNumber, nonsenseProduct2));
-
-  const nonsenseProduct3: ThreeDimensionalProduct<number> = [
-    [
-      {
-        kind: "closed",
-        start: timestampOld,
-        end: timestampNew,
-      },
-      {
-        kind: "open",
-        start: timestampNewer,
-      },
-    ],
-    [
-      {
-        kind: "closed",
-        start: pathG,
-        end: pathA,
-      },
-      {
-        kind: "open",
-        start: pathT,
-      },
-    ],
-    [
-      {
-        kind: "closed",
-        start: 1,
-        end: 2,
-      },
-      {
-        kind: "open",
-        start: 7,
-      },
-    ],
-  ];
-
-  assert(!isSensible3dProduct(orderNumber, nonsenseProduct3));
-
-  const nonsenseProduct4: ThreeDimensionalProduct<number> = [
-    [
-      {
-        kind: "closed",
-        start: timestampOld,
-        end: timestampNew,
-      },
-      {
-        kind: "open",
-        start: timestampNewer,
-      },
-    ],
-    [
-      {
-        kind: "closed",
-        start: pathA,
-        end: pathG,
-      },
-      {
-        kind: "open",
-        start: pathT,
-      },
-    ],
-    [
-      {
-        kind: "closed",
-        start: 1,
-        end: 2,
-      },
-      {
-        kind: "closed",
-        start: 2,
         end: 4,
       },
-    ],
-  ];
+      { kind: "closed_exclusive", start: 7, end: 9 },
+    ]),
+  );
 
-  assert(!isSensible3dProduct(orderNumber, nonsenseProduct4));
+  assert(
+    !isEqualDisjointInterval({
+      order: orderNumber,
+      getSuccessor: (a) => a + 1,
+    }, [
+      { kind: "open", start: 10 },
+      {
+        kind: "closed_exclusive",
+        start: 1,
+        end: 5,
+      },
+      { kind: "closed_exclusive", start: 7, end: 9 },
+    ], [
+      { kind: "open", start: 14 },
+      {
+        kind: "closed_exclusive",
+        start: 1,
+        end: 5,
+      },
+      { kind: "closed_exclusive", start: 7, end: 9 },
+    ]),
+  );
+
+  assert(
+    !isEqualDisjointInterval({
+      order: orderNumber,
+      getSuccessor: (a) => a + 1,
+    }, [
+      { kind: "open", start: 10 },
+      {
+        kind: "closed_exclusive",
+        start: 1,
+        end: 5,
+      },
+      { kind: "closed_exclusive", start: 7, end: 9 },
+    ], []),
+  );
+});
+
+// This test being this way is premised on it using addToDisjointRanges
+Deno.test("mergeDisjointRanges", () => {
+  const range1: Range<number> = {
+    kind: "open",
+    start: 30,
+  };
+
+  const range2: Range<number> = {
+    kind: "closed_exclusive",
+    start: 4,
+    end: 24,
+  };
+
+  const range3: Range<number> = {
+    kind: "open",
+    start: 29,
+  };
+
+  const range4: Range<number> = {
+    kind: "closed_exclusive",
+    start: 2,
+    end: 16,
+  };
+
+  const firstStep = addToDisjointIntervalCanonically({
+    getSuccessor: (num) => num + 1,
+    getPredecessor: (num) => num - 1,
+    order: orderNumber,
+    isInclusiveSmaller: () => false,
+  }, range1);
+  const secondStep = addToDisjointIntervalCanonically(
+    {
+      getSuccessor: (num) => num + 1,
+      getPredecessor: (num) => num - 1,
+      order: orderNumber,
+      isInclusiveSmaller: () => false,
+    },
+    range2,
+    firstStep,
+  );
+  const thirdStep = addToDisjointIntervalCanonically(
+    {
+      getSuccessor: (num) => num + 1,
+      getPredecessor: (num) => num - 1,
+      order: orderNumber,
+      isInclusiveSmaller: () => false,
+    },
+    range3,
+    secondStep,
+  );
+  const expected = addToDisjointIntervalCanonically(
+    {
+      getSuccessor: (num) => num + 1,
+      getPredecessor: (num) => num - 1,
+      order: orderNumber,
+      isInclusiveSmaller: () => false,
+    },
+    range4,
+    thirdStep,
+  );
+
+  const actual = mergeDisjointRanges(
+    {
+      getSuccessor: (num) => num + 1,
+      getPredecessor: (num) => num - 1,
+      order: orderNumber,
+      isInclusiveSmaller: () => false,
+    },
+    [range1],
+    [range2, range3],
+    [
+      range4,
+    ],
+  );
+
+  assertEquals(actual, expected);
 });
 
 Deno.test("addTo3dProduct", () => {
@@ -494,12 +484,12 @@ Deno.test("addTo3dProduct", () => {
 
   const nonsenseRange1: ThreeDimensionalRange<number> = [
     {
-      kind: "closed",
+      kind: "closed_inclusive",
       start: timestampOld,
       end: timestampNew,
     },
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: pathG,
       end: pathA,
     },
@@ -512,19 +502,29 @@ Deno.test("addTo3dProduct", () => {
   const sensibleProduct1: ThreeDimensionalProduct<number> = [[], [], []];
 
   assertThrows(() => {
-    addTo3dProduct(orderNumber, nonsenseRange1, sensibleProduct1);
+    addTo3dProduct(
+      {
+        orderSubspace: orderNumber,
+        getSuccessorSubspace: (num) => num + 1,
+        getPredecessorSubspace: (num) => num - 1,
+        isInclusiveSmallerSubspace: () => false,
+        shouldThrow: true,
+      },
+      nonsenseRange1,
+      sensibleProduct1,
+    );
   });
 
   // Throws on adding to insensible product
 
   const sensibleRange1: ThreeDimensionalRange<number> = [
     {
-      kind: "closed",
+      kind: "closed_inclusive",
       start: timestampOld,
       end: timestampNew,
     },
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: pathA,
       end: pathG,
     },
@@ -538,7 +538,7 @@ Deno.test("addTo3dProduct", () => {
     [],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: pathA,
         end: pathG,
       },
@@ -549,7 +549,7 @@ Deno.test("addTo3dProduct", () => {
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_inclusive",
         start: 1,
         end: 3,
       },
@@ -561,17 +561,27 @@ Deno.test("addTo3dProduct", () => {
   ];
 
   assertThrows(() => {
-    addTo3dProduct(orderNumber, sensibleRange1, nonsenseProduct1);
+    addTo3dProduct(
+      {
+        orderSubspace: orderNumber,
+        getSuccessorSubspace: (num) => num + 1,
+        getPredecessorSubspace: (num) => num - 1,
+        isInclusiveSmallerSubspace: () => false,
+        shouldThrow: true,
+      },
+      sensibleRange1,
+      nonsenseProduct1,
+    );
   });
 
   const sensibleRange2: ThreeDimensionalRange<number> = [
     {
-      kind: "closed",
+      kind: "closed_inclusive",
       start: timestampNew,
       end: timestampNewer,
     },
     {
-      kind: "closed",
+      kind: "closed_exclusive",
       start: pathA,
       end: pathT,
     },
@@ -584,42 +594,49 @@ Deno.test("addTo3dProduct", () => {
   const sensibleProduct2: ThreeDimensionalProduct<number> = [
     [
       {
-        kind: "closed",
+        kind: "closed_inclusive",
         start: timestampOld,
         end: timestampNew,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: pathA,
         end: pathG,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_inclusive",
         start: 2,
         end: 10,
       },
     ],
   ];
 
-  const result = addTo3dProduct(orderNumber, sensibleRange2, sensibleProduct2);
-
-  assert(isSensible3dProduct(orderNumber, result));
+  const result = addTo3dProduct(
+    {
+      orderSubspace: orderNumber,
+      getSuccessorSubspace: (num) => num + 1,
+      getPredecessorSubspace: (num) => num - 1,
+      isInclusiveSmallerSubspace: () => false,
+    },
+    sensibleRange2,
+    sensibleProduct2,
+  );
 
   assertEquals(result, [
     [
       {
-        kind: "closed",
+        kind: "closed_inclusive",
         start: timestampOld,
         end: timestampNewer,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: pathA,
         end: pathT,
       },
@@ -651,50 +668,28 @@ Deno.test("intersect3dProducts", () => {
   const pathG = new TextEncoder().encode("gggg");
   const pathT = new TextEncoder().encode("tttt");
 
-  // throws if passed nonsense product
-
-  const emptyProduct: ThreeDimensionalProduct<number> = [
-    [],
-    [],
-    [],
-  ];
-
-  const nonsenseProduct1: ThreeDimensionalProduct<number> = [
-    [
-      {
-        kind: "closed",
-        start: timestampOld,
-        end: timestampNew,
-      },
-    ],
-    [],
-    [],
-  ];
-
-  assertThrows(() => {
-    intersect3dProducts(orderNumber, emptyProduct, nonsenseProduct1);
-  });
+  const emptyProduct: ThreeDimensionalProduct<number> = [[], [], []];
 
   // If any dimension is empty, it should be empty.
 
   const product1: ThreeDimensionalProduct<number> = [
     [
       {
-        kind: "closed",
+        kind: "closed_inclusive",
         start: timestampOld,
         end: timestampNew,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: pathA,
         end: pathG,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 2,
         end: 7,
       },
@@ -704,7 +699,7 @@ Deno.test("intersect3dProducts", () => {
   const product2: ThreeDimensionalProduct<number> = [
     [
       {
-        kind: "closed",
+        kind: "closed_inclusive",
         start: timestampOld,
         end: timestampNew,
       },
@@ -712,21 +707,30 @@ Deno.test("intersect3dProducts", () => {
     // The dimension with no intersection
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: pathG,
         end: pathT,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 2,
         end: 7,
       },
     ],
   ];
 
-  const res1 = intersect3dProducts(orderNumber, product1, product2);
+  const res1 = intersect3dProducts(
+    {
+      orderSubspace: orderNumber,
+      getSuccessorSubspace: (num) => num + 1,
+      getPredecessorSubspace: (num) => num - 1,
+      isInclusiveSmallerSubspace: () => false,
+    },
+    product1,
+    product2,
+  );
 
   assertEquals(res1, emptyProduct);
 
@@ -735,21 +739,21 @@ Deno.test("intersect3dProducts", () => {
   const product3: ThreeDimensionalProduct<number> = [
     [
       {
-        kind: "closed",
+        kind: "closed_inclusive",
         start: timestampOld,
         end: timestampNewer,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: pathA,
         end: pathT,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 2,
         end: 7,
       },
@@ -759,7 +763,7 @@ Deno.test("intersect3dProducts", () => {
   const product4: ThreeDimensionalProduct<number> = [
     [
       {
-        kind: "closed",
+        kind: "closed_inclusive",
         start: timestampOld,
         end: timestampNew,
       },
@@ -767,137 +771,54 @@ Deno.test("intersect3dProducts", () => {
     // The dimension with no intersection
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: pathG,
         end: pathT,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 1,
         end: 4,
       },
     ],
   ];
 
-  const res2 = intersect3dProducts(orderNumber, product3, product4);
+  const res2 = intersect3dProducts(
+    {
+      orderSubspace: orderNumber,
+      getSuccessorSubspace: (num) => num + 1,
+      getPredecessorSubspace: (num) => num - 1,
+      isInclusiveSmallerSubspace: () => false,
+    },
+    product3,
+    product4,
+  );
 
   assertEquals(res2, [
     [
       {
-        kind: "closed",
+        kind: "closed_inclusive",
         start: timestampOld,
         end: timestampNew,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: pathG,
         end: pathT,
       },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 2,
         end: 4,
       },
     ],
   ]);
-});
-
-Deno.test("isEqualDisjointRange", () => {
-  assert(isEqualDisjointRange(orderNumber, [], []));
-
-  assert(
-    isEqualDisjointRange(orderNumber, [
-      { kind: "open", start: 10 },
-      {
-        kind: "closed",
-        start: 1,
-        end: 5,
-      },
-      { kind: "closed", start: 7, end: 9 },
-    ], [
-      { kind: "open", start: 10 },
-      {
-        kind: "closed",
-        start: 1,
-        end: 5,
-      },
-      { kind: "closed", start: 7, end: 9 },
-    ]),
-  );
-
-  assert(
-    !isEqualDisjointRange(orderNumber, [
-      { kind: "open", start: 10 },
-      {
-        kind: "closed",
-        start: 1,
-        end: 5,
-      },
-      { kind: "closed", start: 7, end: 9 },
-    ], [
-      { kind: "open", start: 14 },
-      {
-        kind: "closed",
-        start: 1,
-        end: 5,
-      },
-      { kind: "closed", start: 7, end: 9 },
-    ]),
-  );
-
-  assert(
-    !isEqualDisjointRange(orderNumber, [
-      { kind: "open", start: 10 },
-      {
-        kind: "closed",
-        start: 1,
-        end: 5,
-      },
-      { kind: "closed", start: 7, end: 9 },
-    ], []),
-  );
-});
-
-// This test being this way is premised on it using addToDisjointRanges
-Deno.test("mergeDisjointRanges", () => {
-  const range1: Range<number> = {
-    kind: "open",
-    start: 30,
-  };
-
-  const range2: Range<number> = {
-    kind: "closed",
-    start: 4,
-    end: 24,
-  };
-
-  const range3: Range<number> = {
-    kind: "open",
-    start: 29,
-  };
-
-  const range4: Range<number> = {
-    kind: "closed",
-    start: 2,
-    end: 16,
-  };
-
-  const firstStep = addToDisjointRange(orderNumber, range1);
-  const secondStep = addToDisjointRange(orderNumber, range2, firstStep);
-  const thirdStep = addToDisjointRange(orderNumber, range3, secondStep);
-  const expected = addToDisjointRange(orderNumber, range4, thirdStep);
-
-  const actual = mergeDisjointRanges(orderNumber, [range1], [range2, range3], [
-    range4,
-  ]);
-
-  assertEquals(actual, expected);
 });
 
 Deno.test("merge3dProducts", () => {
@@ -956,7 +877,7 @@ Deno.test("merge3dProducts", () => {
         start: 16,
       },
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 1,
         end: 3,
       },
@@ -972,7 +893,7 @@ Deno.test("merge3dProducts", () => {
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 12,
         end: 19,
       },
@@ -988,7 +909,7 @@ Deno.test("merge3dProducts", () => {
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 14,
         end: 17,
       },
@@ -996,7 +917,18 @@ Deno.test("merge3dProducts", () => {
   ];
 
   assertEquals(
-    merge3dProducts(orderNumber, product1a, product1b, product1c, product1d),
+    merge3dProducts(
+      {
+        orderSubspace: orderNumber,
+        getSuccessorSubspace: (a) => a + 1,
+        getPredecessorSubspace: (a) => a - 1,
+        isInclusiveSmallerSubspace: () => false,
+      },
+      product1a,
+      product1b,
+      product1c,
+      product1d,
+    ),
     [
       [
         {
@@ -1005,7 +937,10 @@ Deno.test("merge3dProducts", () => {
         },
       ],
       [{ kind: "open", start: pathA }],
-      [{ kind: "closed", start: 1, end: 3 }, { kind: "open", start: 12 }],
+      [{ kind: "closed_exclusive", start: 1, end: 3 }, {
+        kind: "open",
+        start: 12,
+      }],
     ],
   );
 
@@ -1020,7 +955,7 @@ Deno.test("merge3dProducts", () => {
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 12,
         end: 19,
       },
@@ -1036,7 +971,7 @@ Deno.test("merge3dProducts", () => {
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 12,
         end: 19,
       },
@@ -1048,11 +983,11 @@ Deno.test("merge3dProducts", () => {
       { kind: "open", start: timestampNew },
     ],
     [
-      { kind: "closed", start: pathG, end: pathT },
+      { kind: "closed_exclusive", start: pathG, end: pathT },
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 12,
         end: 19,
       },
@@ -1068,7 +1003,7 @@ Deno.test("merge3dProducts", () => {
     ],
     [
       {
-        kind: "closed",
+        kind: "closed_exclusive",
         start: 12,
         end: 19,
       },
@@ -1076,7 +1011,18 @@ Deno.test("merge3dProducts", () => {
   ];
 
   assertEquals(
-    merge3dProducts(orderNumber, product2a, product2b, product2c, product2d),
+    merge3dProducts(
+      {
+        orderSubspace: orderNumber,
+        getSuccessorSubspace: (a) => a + 1,
+        getPredecessorSubspace: (a) => a - 1,
+        isInclusiveSmallerSubspace: () => false,
+      },
+      product2a,
+      product2b,
+      product2c,
+      product2d,
+    ),
     [
       [
         {
@@ -1085,7 +1031,7 @@ Deno.test("merge3dProducts", () => {
         },
       ],
       [{ kind: "open", start: pathA }],
-      [{ kind: "closed", start: 12, end: 19 }],
+      [{ kind: "closed_exclusive", start: 12, end: 19 }],
     ],
   );
 
@@ -1108,7 +1054,7 @@ Deno.test("merge3dProducts", () => {
 
   const product3b: ThreeDimensionalProduct<number> = [
     [
-      { kind: "closed", start: timestampOld, end: timestampNewer },
+      { kind: "closed_exclusive", start: timestampOld, end: timestampNewer },
     ],
     [
       { kind: "open", start: pathG },
@@ -1138,7 +1084,7 @@ Deno.test("merge3dProducts", () => {
 
   const product3d: ThreeDimensionalProduct<number> = [
     [
-      { kind: "closed", start: timestampNew, end: timestampNewer },
+      { kind: "closed_exclusive", start: timestampNew, end: timestampNewer },
     ],
     [
       { kind: "open", start: pathG },
@@ -1152,7 +1098,18 @@ Deno.test("merge3dProducts", () => {
   ];
 
   assertEquals(
-    merge3dProducts(orderNumber, product3a, product3b, product3c, product3d),
+    merge3dProducts(
+      {
+        orderSubspace: orderNumber,
+        getSuccessorSubspace: (a) => a + 1,
+        getPredecessorSubspace: (a) => a - 1,
+        isInclusiveSmallerSubspace: () => false,
+      },
+      product3a,
+      product3b,
+      product3c,
+      product3d,
+    ),
     [
       [
         {
@@ -1212,5 +1169,17 @@ Deno.test("merge3dProducts", () => {
     ],
   ];
 
-  assert(!merge3dProducts(orderNumber, product4a, product4b, product4c));
+  assert(
+    !merge3dProducts(
+      {
+        orderSubspace: orderNumber,
+        getSuccessorSubspace: (a) => a + 1,
+        getPredecessorSubspace: (a) => a - 1,
+        isInclusiveSmallerSubspace: () => false,
+      },
+      product4a,
+      product4b,
+      product4c,
+    ),
+  );
 });

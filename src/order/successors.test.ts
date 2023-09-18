@@ -1,5 +1,5 @@
 import { assertEquals } from "$std/assert/assert_equals.ts";
-import { successorPath, successorTimestamp } from "./successors.ts";
+import { makeSuccessorPath, successorTimestamp } from "./successors.ts";
 
 Deno.test("successorTimestamp", () => {
   {
@@ -34,6 +34,8 @@ Deno.test("successorTimestamp", () => {
 });
 
 Deno.test("successorPath", () => {
+  const successorPath = makeSuccessorPath(4);
+
   {
     const bytes = new Uint8Array([0, 0, 0, 0]);
     const expected = new Uint8Array([0, 0, 0, 1]);
@@ -42,7 +44,7 @@ Deno.test("successorPath", () => {
 
   {
     const bytes = new Uint8Array([0, 0, 0, 255]);
-    const expected = new Uint8Array([0, 0, 0, 255, 0]);
+    const expected = new Uint8Array([0, 0, 1, 0]);
     assertEquals(successorPath(bytes), expected);
   }
 
@@ -53,8 +55,14 @@ Deno.test("successorPath", () => {
   }
 
   {
-    const bytes = new Uint8Array([0, 0, 255, 255]);
-    const expected = new Uint8Array([0, 0, 255, 255, 0]);
+    const bytes = new Uint8Array([255, 255, 255, 255]);
+    const expected = new Uint8Array([255, 255, 255, 255]);
+    assertEquals(successorPath(bytes), expected);
+  }
+
+  {
+    const bytes = new Uint8Array(0);
+    const expected = new Uint8Array([0]);
     assertEquals(successorPath(bytes), expected);
   }
 });

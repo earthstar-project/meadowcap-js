@@ -25,21 +25,19 @@ export function successorTimestamp(bytes: Uint8Array): Uint8Array {
   }
 }
 
-export function successorPath(bytes: Uint8Array): Uint8Array {
-  const last = bytes[bytes.byteLength - 1];
+export function makeSuccessorPath(
+  maxLength: number,
+): (bytes: Uint8Array) => Uint8Array {
+  return (bytes: Uint8Array) => {
+    if (bytes.byteLength < maxLength) {
+      const newBytes = new Uint8Array(bytes.byteLength + 1);
 
-  if (last === 255) {
-    const newBytes = new Uint8Array(bytes.byteLength + 1);
+      newBytes.set(bytes, 0);
+      newBytes.set([0], bytes.byteLength);
 
-    newBytes.set(bytes, 0);
-    newBytes.set([0], bytes.byteLength);
-
-    return newBytes;
-  } else {
-    const newBytes = new Uint8Array(bytes);
-
-    newBytes.set([last + 1], bytes.byteLength - 1);
-
-    return newBytes;
-  }
+      return newBytes;
+    } else {
+      return successorTimestamp(bytes);
+    }
+  };
 }

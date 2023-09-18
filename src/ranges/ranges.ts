@@ -1,6 +1,6 @@
 import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
-import { successorPath, successorTimestamp } from "../order/successors.ts";
+import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
 import {
   predecessorPath,
   predecessorTimestamp,
@@ -19,7 +19,7 @@ export function isValidRange<ValueType>(
   if (range.kind === "closed_exclusive") {
     const startEndOrder = order(range.start, range.end);
 
-    if (startEndOrder !== -1) {
+    if (startEndOrder > -1) {
       return false;
     }
   } else if (range.kind === "closed_inclusive") {
@@ -323,7 +323,7 @@ export function intersectRanges<ValueType>(
     return getSmallerFromInclusiveRange({ getSuccessor, isInclusiveSmaller }, {
       kind: "closed_inclusive",
       start: max.start,
-      end: min.end < max.end ? min.end : max.end,
+      end: order(min.end, max.end) < 0 ? min.end : max.end,
     });
   }
 
@@ -336,6 +336,7 @@ export function intersect3dRanges<SubspaceIdType>(
     getPredecessorSubspace,
     getSuccessorSubspace,
     isInclusiveSmaller,
+    maxPathLength,
   }: {
     orderSubspace: TotalOrder<SubspaceIdType>;
     getPredecessorSubspace: PredecessorFn<SubspaceIdType>;
@@ -344,6 +345,7 @@ export function intersect3dRanges<SubspaceIdType>(
       inclusiveSubspaceId: SubspaceIdType,
       exclusiveSubspaceId: SubspaceIdType,
     ) => boolean;
+    maxPathLength: number;
   },
   a: ThreeDimensionalRange<SubspaceIdType>,
   b: ThreeDimensionalRange<SubspaceIdType>,
@@ -370,7 +372,7 @@ export function intersect3dRanges<SubspaceIdType>(
     {
       order: orderPaths,
       getPredecessor: predecessorPath,
-      getSuccessor: successorPath,
+      getSuccessor: makeSuccessorPath(maxPathLength),
       isInclusiveSmaller: (inclusive, exclusive) => {
         return inclusive.byteLength < exclusive.byteLength;
       },

@@ -3,27 +3,15 @@ import { predecessorPath, predecessorTimestamp } from "./predecessors.ts";
 
 Deno.test("predecessorTimestamp", () => {
   {
-    const bytes = new Uint8Array([0, 0, 0, 255]);
-    const expected = new Uint8Array([0, 0, 0, 254]);
-    assertEquals(predecessorTimestamp(bytes), expected);
+    const time = BigInt(1000);
+    const expected = BigInt(999);
+    assertEquals(predecessorTimestamp(time), expected);
   }
 
   {
-    const bytes = new Uint8Array([0, 0, 255, 0]);
-    const expected = new Uint8Array([0, 0, 254, 255]);
-    assertEquals(predecessorTimestamp(bytes), expected);
-  }
-
-  {
-    const bytes = new Uint8Array([0, 255, 0, 0]);
-    const expected = new Uint8Array([0, 254, 255, 255]);
-    assertEquals(predecessorTimestamp(bytes), expected);
-  }
-
-  {
-    const bytes = new Uint8Array([0, 0, 0, 0]);
-    const expected = new Uint8Array([0, 0, 0, 0]);
-    assertEquals(predecessorTimestamp(bytes), expected);
+    const time = BigInt(0);
+    const expected = BigInt(0);
+    assertEquals(predecessorTimestamp(time), expected);
   }
 });
 

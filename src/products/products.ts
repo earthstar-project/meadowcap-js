@@ -1,20 +1,14 @@
+import {
+  intersectIntervals,
+  isEqualInterval,
+  isValid3dInterval,
+  isValidInterval,
+  orderIntervalPair,
+} from "../intervals/intervals.ts";
+import { Interval, ThreeDimensionalInterval } from "../intervals/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
-import {
-  predecessorPath,
-  predecessorTimestamp,
-} from "../order/predecessors.ts";
-import { successorPath, successorTimestamp } from "../order/successors.ts";
-import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
-import {
-  getSmallerFromExclusiveRange,
-  getSmallerFromInclusiveRange,
-  intersectRanges,
-  isEqualRange,
-  isValid3dRange,
-  isValidRange,
-  orderRangePair,
-} from "../ranges/ranges.ts";
-import { Range, ThreeDimensionalRange } from "../ranges/types.ts";
+import { TotalOrder } from "../order/types.ts";
+
 import {
   DimensionPairing,
   DisjointInterval,
@@ -25,37 +19,23 @@ import {
 export function addToDisjointIntervalCanonically<ValueType>(
   {
     order,
-    getPredecessor,
-    getSuccessor,
-    isInclusiveSmaller,
     shouldThrow,
-    forceInclusive,
   }: {
     order: TotalOrder<ValueType>;
-    getPredecessor: PredecessorFn<ValueType>;
-    getSuccessor: SuccessorFn<ValueType>;
-    isInclusiveSmaller: (inclusive: ValueType, exclusive: ValueType) => boolean;
     shouldThrow?: boolean;
-    forceInclusive?: boolean;
   },
-  range: Range<ValueType>,
+  interval: Interval<ValueType>,
   disjointInterval: DisjointInterval<ValueType> = [],
 ): DisjointInterval<ValueType> {
   // Check if range makes sense.
 
-  if (forceInclusive && shouldThrow && range.kind === "closed_exclusive") {
-    throw new Error(
-      "Tried to add exclusive range to inclusive only disjoint interval",
-    );
-  }
-
-  if (isValidRange(order, range) === false) {
+  if (isValidInterval(order, interval) === false) {
     throw new Error("Badly formed range");
   }
 
-  const newDisjointInterval: Range<ValueType>[] = [];
+  const newDisjointInterval: Interval<ValueType>[] = [];
 
-  let foldedRange = { ...range };
+  let foldedInterval = { ...interval };
 
   const maybeThrow = (msg: string) => {
     if (shouldThrow) {
@@ -63,23 +43,26 @@ export function addToDisjointIntervalCanonically<ValueType>(
     }
   };
 
-  for (const existingRange of disjointInterval) {
-    const [x, y] = orderRangePair(existingRange, foldedRange);
+  for (const existingInterval of disjointInterval) {
+    const [x, y] = orderIntervalPair(existingInterval, foldedInterval);
 
     if (x.kind === "open" && y.kind === "open") {
       maybeThrow("More than one open range present");
 
-      const openStartOrder = order(foldedRange.start, existingRange.start);
+      const openStartOrder = order(
+        foldedInterval.start,
+        existingInterval.start,
+      );
 
       if (openStartOrder > 0) {
-        foldedRange.start = existingRange.start;
+        foldedInterval.start = existingInterval.start;
       }
     } else if (
       x.kind === "open" &&
-      (y.kind === "closed_exclusive" || y.kind === "closed_inclusive")
+      y.kind === "closed_exclusive"
     ) {
       const closedEndOpenStartOrder = order(
-        y.kind === "closed_exclusive" ? y.end : getSuccessor(y.end),
+        y.end,
         x.start,
       );
       const openStartClosedStartOrder = order(
@@ -90,41 +73,41 @@ export function addToDisjointIntervalCanonically<ValueType>(
       if (openStartClosedStartOrder < 0) {
         maybeThrow("Closed range succeeded and open range's start");
 
-        foldedRange = {
+        foldedInterval = {
           kind: "open",
           start: x.start,
         };
       } else if (closedEndOpenStartOrder >= 0) {
         maybeThrow("Closed range overlapped / adjacent to an open range");
 
-        foldedRange = {
+        foldedInterval = {
           kind: "open",
           start: y.start,
         };
       } else {
-        newDisjointInterval.push(existingRange);
+        newDisjointInterval.push(existingInterval);
       }
     } else if (
-      (x.kind === "closed_exclusive" || x.kind === "closed_inclusive") &&
-      (y.kind === "closed_exclusive" || y.kind === "closed_inclusive")
+      x.kind === "closed_exclusive" &&
+      y.kind === "closed_exclusive"
     ) {
       const xEndYStartOrder = order(
-        x.kind === "closed_exclusive" ? x.end : getSuccessor(x.end),
+        x.end,
         y.start,
       );
 
       if (xEndYStartOrder === -1) {
-        newDisjointInterval.push(existingRange);
+        newDisjointInterval.push(existingInterval);
         continue;
       }
 
       const yEndXStartOrder = order(
-        y.kind === "closed_exclusive" ? y.end : getSuccessor(y.end),
+        y.end,
         x.start,
       );
 
       if (yEndXStartOrder === -1) {
-        newDisjointInterval.push(existingRange);
+        newDisjointInterval.push(existingInterval);
         continue;
       }
 
@@ -133,14 +116,9 @@ export function addToDisjointIntervalCanonically<ValueType>(
       maybeThrow("Overlapping / adjacent ranges");
 
       const leastStart = order(x.start, y.start) <= 0 ? x.start : y.start;
-      const greatestEnd = order(
-          x.kind === "closed_exclusive" ? x.end : getSuccessor(x.end),
-          y.kind === "closed_exclusive" ? y.end : getSuccessor(y.end),
-        ) > 0
-        ? x
-        : y;
+      const greatestEnd = order(x.end, y.end) > 0 ? x : y;
 
-      foldedRange = {
+      foldedInterval = {
         kind: greatestEnd.kind,
         start: leastStart,
         end: greatestEnd.end,
@@ -148,51 +126,24 @@ export function addToDisjointIntervalCanonically<ValueType>(
     }
   }
 
-  if (foldedRange.kind === "open") {
-    newDisjointInterval.push(foldedRange);
-  } else if (foldedRange.kind === "closed_exclusive") {
-    newDisjointInterval.push(getSmallerFromExclusiveRange({
-      getPredecessor,
-      isInclusiveSmaller: forceInclusive ? () => true : isInclusiveSmaller,
-    }, foldedRange));
-  } else {
-    newDisjointInterval.push(getSmallerFromInclusiveRange({
-      getSuccessor,
-      isInclusiveSmaller: forceInclusive ? () => true : isInclusiveSmaller,
-    }, foldedRange));
-  }
+  newDisjointInterval.push(foldedInterval);
 
   return newDisjointInterval;
 }
 
 /** Intersect two disjoint intervals, presumed to be canonical. */
 export function intersectDisjointIntervals<ValueType>(
-  {
-    order,
-    getPredecessor,
-    getSuccessor,
-    isInclusiveSmaller,
-  }: {
-    order: TotalOrder<ValueType>;
-    getPredecessor: PredecessorFn<ValueType>;
-    getSuccessor: SuccessorFn<ValueType>;
-    isInclusiveSmaller: (inclusive: ValueType, exclusive: ValueType) => boolean;
-  },
+  { order }: { order: TotalOrder<ValueType> },
   a: DisjointInterval<ValueType>,
   b: DisjointInterval<ValueType>,
 ) {
   const newRange: DisjointInterval<ValueType> = [];
 
-  for (const rangeA of a) {
+  for (const intervalA of a) {
     for (const rangeB of b) {
-      const intersection = intersectRanges(
-        {
-          order,
-          getPredecessor,
-          isInclusiveSmaller,
-          getSuccessor,
-        },
-        rangeA,
+      const intersection = intersectIntervals(
+        { order },
+        intervalA,
         rangeB,
       );
 
@@ -206,10 +157,7 @@ export function intersectDisjointIntervals<ValueType>(
 }
 
 export function isEqualDisjointInterval<ValueType>(
-  { order, getSuccessor }: {
-    order: TotalOrder<ValueType>;
-    getSuccessor: SuccessorFn<ValueType>;
-  },
+  { order }: { order: TotalOrder<ValueType> },
   a: DisjointInterval<ValueType>,
   b: DisjointInterval<ValueType>,
 ): boolean {
@@ -221,7 +169,7 @@ export function isEqualDisjointInterval<ValueType>(
     const rangeA = a[i];
     const rangeB = b[i];
 
-    if (isEqualRange({ order, getSuccessor }, rangeA, rangeB) === false) {
+    if (isEqualInterval({ order }, rangeA, rangeB) === false) {
       return false;
     }
   }
@@ -229,23 +177,15 @@ export function isEqualDisjointInterval<ValueType>(
   return true;
 }
 
-export function mergeDisjointRanges<ValueType>(
-  {
-    order,
-    getPredecessor,
-    getSuccessor,
-    isInclusiveSmaller,
-  }: {
-    order: TotalOrder<ValueType>;
-    getPredecessor: PredecessorFn<ValueType>;
-    getSuccessor: SuccessorFn<ValueType>;
-    isInclusiveSmaller: (inclusive: ValueType, exclusive: ValueType) => boolean;
-    shouldThrow?: boolean;
-    forceInclusive?: boolean;
-  },
-  ...disjointRanges: DisjointInterval<ValueType>[]
+export function mergeDisjointIntervals<ValueType>(
+  { order }: { order: TotalOrder<ValueType> },
+  ...DisjointIntervals: DisjointInterval<ValueType>[]
 ): DisjointInterval<ValueType> {
-  const [first, ...rest] = disjointRanges;
+  if (DisjointIntervals.length === 0) {
+    return [];
+  }
+
+  const [first, ...rest] = DisjointIntervals;
 
   let mergedDisjointRange = [...first];
 
@@ -254,9 +194,6 @@ export function mergeDisjointRanges<ValueType>(
       mergedDisjointRange = addToDisjointIntervalCanonically(
         {
           order,
-          getPredecessor,
-          getSuccessor,
-          isInclusiveSmaller,
         },
         range,
         mergedDisjointRange,
@@ -267,140 +204,83 @@ export function mergeDisjointRanges<ValueType>(
   return mergedDisjointRange;
 }
 
+export function hasOpenRange<ValueType>(
+  disjointRanges: DisjointInterval<ValueType>,
+) {
+  for (const range of disjointRanges) {
+    if (range.kind === "open") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Three dimensional products
 
 export function addTo3dProduct<SubspaceIdType>(
   {
     orderSubspace,
-    getPredecessorSubspace,
-    getSuccessorSubspace,
-    isInclusiveSmallerSubspace,
     shouldThrow,
   }: {
     orderSubspace: TotalOrder<SubspaceIdType>;
-    getPredecessorSubspace: PredecessorFn<SubspaceIdType>;
-    getSuccessorSubspace: SuccessorFn<SubspaceIdType>;
-    isInclusiveSmallerSubspace: (
-      inclusive: SubspaceIdType,
-      exclusive: SubspaceIdType,
-    ) => boolean;
     shouldThrow?: boolean;
   },
-  range: ThreeDimensionalRange<SubspaceIdType>,
+  interval3d: ThreeDimensionalInterval<SubspaceIdType>,
   product: ThreeDimensionalProduct<SubspaceIdType>,
 ): ThreeDimensionalProduct<SubspaceIdType> {
-  if (isValid3dRange(orderSubspace, range) === false) {
-    throw new Error("Badly formed 3D range");
+  if (isValid3dInterval(orderSubspace, interval3d) === false) {
+    throw new Error("Badly formed 3D interval");
   }
 
-  const [timestampRange, pathRange, subspaceRange] = range;
-  const [timestampDisjoint, pathDisjoint, subspaceDisjoint] = product;
-
-  const nextTimestampDisjoint = addToDisjointIntervalCanonically(
-    {
-      forceInclusive: true,
-      isInclusiveSmaller: () => true,
-      order: orderTimestamps,
-      getPredecessor: predecessorTimestamp,
-      getSuccessor: successorTimestamp,
-      shouldThrow,
-    },
-    timestampRange,
-    timestampDisjoint,
-  );
-
-  const nextPathDisjoint = addToDisjointIntervalCanonically(
-    {
-      order: orderPaths,
-      getPredecessor: predecessorPath,
-      getSuccessor: successorPath,
-      isInclusiveSmaller: (a, b) => a.byteLength < b.byteLength,
-      shouldThrow,
-    },
-    pathRange,
-    pathDisjoint,
-  );
+  const [subspaceRange, pathRange, timestampRange] = interval3d;
+  const [subspaceDisjoint, pathDisjoint, timestampDisjoint] = product;
 
   const nextSubspaceDisjoint = addToDisjointIntervalCanonically(
     {
       order: orderSubspace,
-      getPredecessor: getPredecessorSubspace,
-      getSuccessor: getSuccessorSubspace,
-      isInclusiveSmaller: isInclusiveSmallerSubspace,
       shouldThrow,
     },
     subspaceRange,
     subspaceDisjoint,
   );
 
-  // TODO: check if all are empty, or all have at least one item.
+  const nextPathDisjoint = addToDisjointIntervalCanonically(
+    {
+      order: orderPaths,
+      shouldThrow,
+    },
+    pathRange,
+    pathDisjoint,
+  );
+
+  const nextTimestampDisjoint = addToDisjointIntervalCanonically(
+    {
+      order: orderTimestamps,
+      shouldThrow,
+    },
+    timestampRange,
+    timestampDisjoint,
+  );
 
   return [
-    nextTimestampDisjoint,
-    nextPathDisjoint,
     nextSubspaceDisjoint,
+    nextPathDisjoint,
+    nextTimestampDisjoint,
   ];
 }
 
 /* Intersect two 3d products, presumed to be canonical */
 export function intersect3dProducts<SubspaceIdType>(
-  {
-    orderSubspace,
-    getPredecessorSubspace,
-    getSuccessorSubspace,
-    isInclusiveSmallerSubspace,
-  }: {
-    orderSubspace: TotalOrder<SubspaceIdType>;
-    getPredecessorSubspace: PredecessorFn<SubspaceIdType>;
-    getSuccessorSubspace: SuccessorFn<SubspaceIdType>;
-    isInclusiveSmallerSubspace: (
-      inclusive: SubspaceIdType,
-      exclusive: SubspaceIdType,
-    ) => boolean;
-  },
+  { orderSubspace }: { orderSubspace: TotalOrder<SubspaceIdType> },
   a: ThreeDimensionalProduct<SubspaceIdType>,
   b: ThreeDimensionalProduct<SubspaceIdType>,
 ): ThreeDimensionalProduct<SubspaceIdType> {
-  const [timestampDjA, pathDjA, subspaceDjA] = a;
-  const [timestampDjB, pathDjB, subspaceDjB] = b;
-
-  const intersectionTimestamp = intersectDisjointIntervals(
-    {
-      isInclusiveSmaller: () => true,
-      order: orderTimestamps,
-      getPredecessor: predecessorTimestamp,
-      getSuccessor: successorTimestamp,
-    },
-    timestampDjA,
-    timestampDjB,
-  );
-
-  if (intersectionTimestamp.length === 0) {
-    return [[], [], []];
-  }
-
-  const intersectionPath = intersectDisjointIntervals(
-    {
-      order: orderPaths,
-      getPredecessor: predecessorPath,
-      getSuccessor: successorPath,
-      isInclusiveSmaller: (a, b) => a.byteLength < b.byteLength,
-    },
-    pathDjA,
-    pathDjB,
-  );
-
-  if (intersectionPath.length === 0) {
-    return [[], [], []];
-  }
+  const [subspaceDjA, pathDjA, timestampDjA] = a;
+  const [subspaceDjB, pathDjB, timestampDjB] = b;
 
   const intersectionSubspace = intersectDisjointIntervals(
-    {
-      order: orderSubspace,
-      getPredecessor: getPredecessorSubspace,
-      getSuccessor: getSuccessorSubspace,
-      isInclusiveSmaller: isInclusiveSmallerSubspace,
-    },
+    { order: orderSubspace },
     subspaceDjA,
     subspaceDjB,
   );
@@ -409,23 +289,39 @@ export function intersect3dProducts<SubspaceIdType>(
     return [[], [], []];
   }
 
+  const intersectionPath = intersectDisjointIntervals(
+    { order: orderPaths },
+    pathDjA,
+    pathDjB,
+  );
+
+  if (intersectionPath.length === 0) {
+    return [[], [], []];
+  }
+
+  const intersectionTimestamp = intersectDisjointIntervals(
+    { order: orderTimestamps },
+    timestampDjA,
+    timestampDjB,
+  );
+
+  if (intersectionTimestamp.length === 0) {
+    return [[], [], []];
+  }
+
   return [
-    intersectionTimestamp,
-    intersectionPath,
     intersectionSubspace,
+    intersectionPath,
+    intersectionTimestamp,
   ];
 }
 
-function allRangesMatchOnDimensions<SubspaceIdType>(
+function allRangesNonEmptyAndMatchOnDimensions<SubspaceIdType>(
   {
     orderSubspace,
-
-    getSuccessorSubspace,
     dimensions,
   }: {
     orderSubspace: TotalOrder<SubspaceIdType>;
-
-    getSuccessorSubspace: SuccessorFn<SubspaceIdType>;
     dimensions: DimensionPairing;
   },
   ...remainingProducts: ThreeDimensionalProduct<SubspaceIdType>[]
@@ -435,24 +331,26 @@ function allRangesMatchOnDimensions<SubspaceIdType>(
     const productB = remainingProducts[i + 1];
 
     if (dimensions === "timestamp_path") {
+      if (productA[2].length === 0 || productB[2].length === 0) {
+        return false;
+      }
+
       const timestampDjEqual = isEqualDisjointInterval(
-        {
-          order: orderTimestamps,
-          getSuccessor: successorTimestamp,
-        },
-        productA[0],
-        productB[0],
+        { order: orderTimestamps },
+        productA[2],
+        productB[2],
       );
 
       if (!timestampDjEqual) {
         return false;
       }
 
+      if (productA[1].length === 0 || productB[1].length === 0) {
+        return false;
+      }
+
       const pathDjEqual = isEqualDisjointInterval(
-        {
-          order: orderPaths,
-          getSuccessor: successorPath,
-        },
+        { order: orderPaths },
         productA[1],
         productB[1],
       );
@@ -461,37 +359,40 @@ function allRangesMatchOnDimensions<SubspaceIdType>(
         return false;
       }
     } else if (dimensions === "timestamp_subspace") {
+      if (productA[2].length === 0 || productB[2].length === 0) {
+        return false;
+      }
+
       const timestampDjEqual = isEqualDisjointInterval(
-        {
-          order: orderTimestamps,
-          getSuccessor: successorTimestamp,
-        },
-        productA[0],
-        productB[0],
+        { order: orderTimestamps },
+        productA[2],
+        productB[2],
       );
 
       if (!timestampDjEqual) {
         return false;
       }
 
+      if (productA[0].length === 0 || productB[0].length === 0) {
+        return false;
+      }
+
       const subspaceDjEqual = isEqualDisjointInterval(
-        {
-          order: orderSubspace,
-          getSuccessor: getSuccessorSubspace,
-        },
-        productA[2],
-        productB[2],
+        { order: orderSubspace },
+        productA[0],
+        productB[0],
       );
 
       if (!subspaceDjEqual) {
         return false;
       }
     } else if (dimensions === "path_subspace") {
+      if (productA[1].length === 0 || productB[1].length === 0) {
+        return false;
+      }
+
       const pathDjEqual = isEqualDisjointInterval(
-        {
-          order: orderPaths,
-          getSuccessor: successorPath,
-        },
+        { order: orderPaths },
         productA[1],
         productB[1],
       );
@@ -500,13 +401,14 @@ function allRangesMatchOnDimensions<SubspaceIdType>(
         return false;
       }
 
+      if (productA[0].length === 0 || productB[0].length === 0) {
+        return false;
+      }
+
       const subspaceDjEqual = isEqualDisjointInterval(
-        {
-          order: orderSubspace,
-          getSuccessor: getSuccessorSubspace,
-        },
-        productA[2],
-        productB[2],
+        { order: orderSubspace },
+        productA[0],
+        productB[0],
       );
 
       if (!subspaceDjEqual) {
@@ -519,68 +421,49 @@ function allRangesMatchOnDimensions<SubspaceIdType>(
 }
 
 export function merge3dProducts<SubspaceIdType>(
-  {
-    orderSubspace,
-    getPredecessorSubspace,
-    getSuccessorSubspace,
-    isInclusiveSmallerSubspace,
-  }: {
-    orderSubspace: TotalOrder<SubspaceIdType>;
-    getPredecessorSubspace: PredecessorFn<SubspaceIdType>;
-    getSuccessorSubspace: SuccessorFn<SubspaceIdType>;
-    isInclusiveSmallerSubspace: (
-      inclusive: SubspaceIdType,
-      exclusive: SubspaceIdType,
-    ) => boolean;
-  },
+  { orderSubspace }: { orderSubspace: TotalOrder<SubspaceIdType> },
   ...products: ThreeDimensionalProduct<SubspaceIdType>[]
-): ThreeDimensionalProduct<SubspaceIdType> | null {
+): ThreeDimensionalProduct<SubspaceIdType> {
   const [fst, snd] = products;
   const [_fst, ...remainingProducts] = products;
 
-  const [timestampDjA, pathDjA, subspaceDjA] = fst;
-  const [timestampDjB, pathDjB, subspaceDjB] = snd;
+  const [subspaceDjA, pathDjA, timestampDjA] = fst;
+  const [subspaceDjB, pathDjB, timestampDjB] = snd;
 
   const subspaceIsEqual = isEqualDisjointInterval(
-    { order: orderSubspace, getSuccessor: getSuccessorSubspace },
+    { order: orderSubspace },
     subspaceDjA,
     subspaceDjB,
   );
   const timestampIsEqual = isEqualDisjointInterval(
-    { order: orderTimestamps, getSuccessor: successorTimestamp },
+    { order: orderTimestamps },
     timestampDjA,
     timestampDjB,
   );
 
+  // TODO: If any one of these is empty...
+
   if (subspaceIsEqual && timestampIsEqual) {
     // Check all remaining pairs have same subspace + timestamp.
-    const allOtherPairsMatch = allRangesMatchOnDimensions(
-      { orderSubspace, getSuccessorSubspace, dimensions: "timestamp_subspace" },
+    const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
+      { orderSubspace, dimensions: "timestamp_subspace" },
       ...remainingProducts,
     );
 
     if (allOtherPairsMatch) {
       return [
-        timestampDjA,
-        mergeDisjointRanges(
-          {
-            order: orderPaths,
-            getPredecessor: predecessorPath,
-            getSuccessor: successorPath,
-            isInclusiveSmaller: (a, b) => a.byteLength < b.byteLength,
-          },
+        subspaceDjA,
+        mergeDisjointIntervals(
+          { order: orderPaths },
           ...products.map((product) => product[1]),
         ),
-        subspaceDjA,
+        timestampDjA,
       ];
     }
   }
 
   const pathIsEqual = isEqualDisjointInterval(
-    {
-      order: orderPaths,
-      getSuccessor: successorPath,
-    },
+    { order: orderPaths },
     pathDjA,
     pathDjB,
   );
@@ -588,48 +471,40 @@ export function merge3dProducts<SubspaceIdType>(
   if (
     (pathIsEqual && timestampIsEqual)
   ) {
-    const allOtherPairsMatch = allRangesMatchOnDimensions(
-      { orderSubspace, getSuccessorSubspace, dimensions: "timestamp_path" },
+    const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
+      { orderSubspace, dimensions: "timestamp_path" },
       ...remainingProducts,
     );
 
     if (allOtherPairsMatch) {
       return [
-        timestampDjA,
+        mergeDisjointIntervals(
+          { order: orderSubspace },
+          ...products.map((product) => product[0]),
+        ),
         pathDjA,
-        mergeDisjointRanges(
-          {
-            order: orderSubspace,
-            getPredecessor: getPredecessorSubspace,
-            getSuccessor: getSuccessorSubspace,
-            isInclusiveSmaller: isInclusiveSmallerSubspace,
-          },
+        timestampDjA,
+      ];
+    }
+  } else if ((pathIsEqual && subspaceIsEqual)) {
+    const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
+      { orderSubspace, dimensions: "path_subspace" },
+      ...remainingProducts,
+    );
+
+    if (allOtherPairsMatch) {
+      return [
+        subspaceDjA,
+        pathDjA,
+        mergeDisjointIntervals(
+          { order: orderTimestamps },
           ...products.map((product) => product[2]),
         ),
       ];
     }
-  } else if ((pathIsEqual && subspaceIsEqual)) {
-    const allOtherPairsMatch = allRangesMatchOnDimensions(
-      { orderSubspace, getSuccessorSubspace, dimensions: "path_subspace" },
-      ...remainingProducts,
-    );
-
-    if (allOtherPairsMatch) {
-      return [
-        mergeDisjointRanges(
-          {
-            order: orderTimestamps,
-            getSuccessor: successorTimestamp,
-            getPredecessor: predecessorTimestamp,
-            isInclusiveSmaller: () => false,
-          },
-          ...products.map((product) => product[0]),
-        ),
-        pathDjA,
-        subspaceDjA,
-      ];
-    }
   }
 
-  return null;
+  return [[], [], []];
 }
+
+// TODO: ThreeDimensionalProduct to Canonical3dProduct fn

@@ -27,18 +27,12 @@ export function orderPaths(a: Uint8Array, b: Uint8Array): -1 | 0 | 1 {
   return 0;
 }
 
-export function orderTimestamps(a: Uint8Array, b: Uint8Array): -1 | 0 | 1 {
-  const viewA = new DataView(a.buffer);
-  const viewB = new DataView(b.buffer);
-
-  const bigA = viewA.getBigUint64(0);
-  const bigB = viewB.getBigUint64(0);
-
-  if (bigA < bigB) {
+export function orderTimestamps(a: bigint, b: bigint): -1 | 0 | 1 {
+  if (a < b) {
     return -1;
   }
 
-  if (bigA > bigB) {
+  if (a > b) {
     return 1;
   }
 

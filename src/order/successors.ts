@@ -1,4 +1,25 @@
-export function successorTimestamp(bytes: Uint8Array): Uint8Array {
+export function successorTimestamp(time: bigint): bigint {
+  return time + BigInt(1);
+}
+
+export function makeSuccessorPath(
+  maxLength: number,
+): (bytes: Uint8Array) => Uint8Array {
+  return (bytes: Uint8Array) => {
+    if (bytes.byteLength < maxLength) {
+      const newBytes = new Uint8Array(bytes.byteLength + 1);
+
+      newBytes.set(bytes, 0);
+      newBytes.set([0], bytes.byteLength);
+
+      return newBytes;
+    } else {
+      return incrementBytesLeft(bytes);
+    }
+  };
+}
+
+function incrementBytesLeft(bytes: Uint8Array): Uint8Array {
   const newBytes = new Uint8Array(bytes.byteLength);
 
   const last = bytes[bytes.byteLength - 1];
@@ -6,7 +27,7 @@ export function successorTimestamp(bytes: Uint8Array): Uint8Array {
   if (last === 255 && bytes.byteLength > 1) {
     newBytes.set([last + 1], bytes.byteLength - 1);
 
-    const left = successorTimestamp(bytes.slice(0, bytes.byteLength - 1));
+    const left = incrementBytesLeft(bytes.slice(0, bytes.byteLength - 1));
 
     if (last === 255 && left[left.byteLength - 1] === 255) {
       return bytes;
@@ -23,21 +44,4 @@ export function successorTimestamp(bytes: Uint8Array): Uint8Array {
 
     return newBytes;
   }
-}
-
-export function makeSuccessorPath(
-  maxLength: number,
-): (bytes: Uint8Array) => Uint8Array {
-  return (bytes: Uint8Array) => {
-    if (bytes.byteLength < maxLength) {
-      const newBytes = new Uint8Array(bytes.byteLength + 1);
-
-      newBytes.set(bytes, 0);
-      newBytes.set([0], bytes.byteLength);
-
-      return newBytes;
-    } else {
-      return successorTimestamp(bytes);
-    }
-  };
 }

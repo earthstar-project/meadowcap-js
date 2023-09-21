@@ -24,7 +24,7 @@ export type ThreeDimensionalProduct<SubspaceIdType> = [
  *
  * In addition to the canonic guarantees of a `ThreeDimensionalProduct`, this type also guarantees that closed ranges are of the canonic type, depending on encoding size and dimension.
  */
-export type CanonicalProduct<SubspaceIdType> = [
+export type CanonicProduct<SubspaceIdType> = [
   /** Subspace ID disjoint interval */
   DisjointRange<SubspaceIdType>,
   /** Path disjoint interval */

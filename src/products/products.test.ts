@@ -15,11 +15,13 @@ import {
   getRandom3dProduct,
   getRandomDisjointInterval,
   getRandomInterval,
+  predecessorNumber,
   successorNumber,
 } from "../test/util.ts";
 import {
   addTo3dProduct,
   addToDisjointIntervalCanonically,
+  canonicProduct,
   intersect3dProducts,
   intersectDisjointIntervals,
   isEqualDisjointInterval,
@@ -27,6 +29,7 @@ import {
   mergeDisjointIntervals,
 } from "./products.ts";
 import { DisjointInterval, ThreeDimensionalProduct } from "./types.ts";
+import { predecessorPath } from "../order/predecessors.ts";
 
 function orderNumber(a: number, b: number) {
   if (a > b) {
@@ -732,6 +735,56 @@ Deno.test("merge3dProducts", () => {
       );
 
       assertEquals(merged, [[], [], []]);
+    }
+  }
+});
+
+Deno.test("canonicProduct", () => {
+  for (let i = 0; i < 100; i++) {
+    // Make a random product.
+
+    const product = getRandom3dProduct({
+      minValue: 0,
+      maxSize: 100,
+      order: orderNumber,
+      successor: successorNumber,
+    });
+
+    const [subspaceDisjointRange, pathDisjointRange, timeDisjointRange] =
+      canonicProduct({
+        predecessorSubspace: predecessorNumber,
+        isInclusiveSmallerSubspace: () => false,
+      }, product);
+
+    for (const range of subspaceDisjointRange) {
+      if (range.kind === "open") {
+        continue;
+      }
+
+      assert(range.kind === "closed_exclusive");
+    }
+
+    for (const range of pathDisjointRange) {
+      if (range.kind === "open") {
+        continue;
+      } else if (range.kind === "closed_exclusive") {
+        const inclusiveIsNotSmaller =
+          predecessorPath(range.end).byteLength >= range.end.byteLength;
+
+        assert(inclusiveIsNotSmaller);
+      } else {
+        const inclusiveIsSmaller = makeSuccessorPath(4)(range.end) > range.end;
+
+        assert(inclusiveIsSmaller);
+      }
+    }
+
+    for (const range of timeDisjointRange) {
+      if (range.kind === "open") {
+        continue;
+      }
+
+      assert(range.kind === "closed_exclusive");
     }
   }
 });

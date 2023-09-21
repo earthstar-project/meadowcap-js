@@ -7,11 +7,18 @@ import {
 } from "../intervals/intervals.ts";
 import { Interval, ThreeDimensionalInterval } from "../intervals/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
-import { TotalOrder } from "../order/types.ts";
+import {
+  predecessorPath,
+  predecessorTimestamp,
+} from "../order/predecessors.ts";
+import { PredecessorFn, TotalOrder } from "../order/types.ts";
+import { getSmallerFromExclusiveRange } from "../ranges/ranges.ts";
 
 import {
+  CanonicProduct,
   DimensionPairing,
   DisjointInterval,
+  DisjointRange,
   ThreeDimensionalProduct,
 } from "./types.ts";
 
@@ -508,3 +515,72 @@ export function merge3dProducts<SubspaceIdType>(
 }
 
 // TODO: ThreeDimensionalProduct to Canonical3dProduct fn
+
+export function canonicProduct<SubspaceIdType>(
+  {
+    predecessorSubspace,
+    isInclusiveSmallerSubspace,
+  }: {
+    predecessorSubspace: PredecessorFn<SubspaceIdType>;
+    isInclusiveSmallerSubspace: (
+      inclusive: SubspaceIdType,
+      exclusive: SubspaceIdType,
+    ) => boolean;
+  },
+  prod: ThreeDimensionalProduct<SubspaceIdType>,
+): CanonicProduct<SubspaceIdType> {
+  const [subspaceDisjointInterval, pathDisjointInterval, timeDisjointInterval] =
+    prod;
+
+  // Subspace encoding smaller
+  const subspaceDisjointRange: DisjointRange<SubspaceIdType> = [];
+
+  for (const interval of subspaceDisjointInterval) {
+    if (interval.kind === "open") {
+      subspaceDisjointRange.push(interval);
+      continue;
+    }
+
+    subspaceDisjointRange.push(getSmallerFromExclusiveRange({
+      predecessor: predecessorSubspace,
+      isInclusiveSmaller: isInclusiveSmallerSubspace,
+    }, interval));
+  }
+
+  // Path encoding smaller
+  const pathDisjointRange: DisjointRange<Uint8Array> = [];
+
+  for (const interval of pathDisjointInterval) {
+    if (interval.kind === "open") {
+      pathDisjointRange.push(interval);
+      continue;
+    }
+
+    pathDisjointRange.push(getSmallerFromExclusiveRange({
+      predecessor: predecessorPath,
+      isInclusiveSmaller: (inclusive, exclusive) =>
+        inclusive.byteLength < exclusive.byteLength,
+    }, interval));
+  }
+
+  // Time must be exclusive.
+  const timeDisjointRange: DisjointRange<bigint> = [];
+
+  for (const interval of timeDisjointInterval) {
+    if (interval.kind === "open") {
+      timeDisjointRange.push(interval);
+      continue;
+    }
+
+    timeDisjointRange.push(getSmallerFromExclusiveRange({
+      predecessor: predecessorTimestamp,
+      isInclusiveSmaller: () => false,
+    }, interval));
+  }
+
+  return [
+    subspaceDisjointRange,
+    pathDisjointRange,
+    timeDisjointRange,
+  ];
+}

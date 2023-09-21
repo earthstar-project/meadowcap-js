@@ -212,7 +212,7 @@ export function mergeDisjointIntervals<ValueType>(
 }
 
 export function hasOpenRange<ValueType>(
-  disjointRanges: DisjointInterval<ValueType>,
+  disjointRanges: DisjointRange<ValueType>,
 ) {
   for (const range of disjointRanges) {
     if (range.kind === "open") {
@@ -448,9 +448,17 @@ export function merge3dProducts<SubspaceIdType>(
     timestampDjB,
   );
 
-  // TODO: If any one of these is empty...
+  const pathIsEqual = isEqualDisjointInterval(
+    { order: orderPaths },
+    pathDjA,
+    pathDjB,
+  );
 
-  if (subspaceIsEqual && timestampIsEqual) {
+  if (!subspaceIsEqual && !timestampIsEqual && !pathIsEqual) {
+    return [[], [], []];
+  }
+
+  if (timestampIsEqual && subspaceIsEqual) {
     // Check all remaining pairs have same subspace + timestamp.
     const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
       { orderSubspace, dimensions: "timestamp_subspace" },
@@ -468,12 +476,6 @@ export function merge3dProducts<SubspaceIdType>(
       ];
     }
   }
-
-  const pathIsEqual = isEqualDisjointInterval(
-    { order: orderPaths },
-    pathDjA,
-    pathDjB,
-  );
 
   if (
     (pathIsEqual && timestampIsEqual)
@@ -493,7 +495,9 @@ export function merge3dProducts<SubspaceIdType>(
         timestampDjA,
       ];
     }
-  } else if ((pathIsEqual && subspaceIsEqual)) {
+  }
+
+  if ((pathIsEqual && subspaceIsEqual)) {
     const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
       { orderSubspace, dimensions: "path_subspace" },
       ...remainingProducts,

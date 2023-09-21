@@ -6,6 +6,7 @@ import {
 } from "../order/predecessors.ts";
 import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
 import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
+import { addToDisjointIntervalCanonically } from "../products/products.ts";
 import {
   DisjointInterval,
   ThreeDimensionalProduct,
@@ -305,49 +306,60 @@ export function getRandomDisjointInterval<ValueType>(
     order: TotalOrder<ValueType>;
   },
 ): DisjointInterval<ValueType> {
-  const disjointInterval: DisjointInterval<ValueType> = [];
+  let disjointInterval: DisjointInterval<ValueType> = [];
+
+  let start = minValue;
+  let end = minValue;
 
   while (true) {
-    const startDelta = Math.floor(Math.random() * (10 - 1) + 1);
+    start = end;
 
-    const isOpen = Math.random() < 0.15;
+    while (true) {
+      start = successor(start);
 
-    let start = minValue;
-
-    if (isOpen) {
-      for (let i = 0; i < startDelta; i++) {
-        start = successor(start);
-      }
-
-      disjointInterval.push({
-        kind: "open",
-        start,
-      });
-
-      break;
-    }
-
-    const size = Math.floor(Math.random() * (10 - 1) + 1);
-
-    let end = start;
-
-    for (let i = 0; i < size; i++) {
-      const next = successor(end);
-
-      if (order(next, maxSize) <= 0) {
-        end = next;
+      if (Math.random() > 0.8) {
+        break;
       }
     }
 
-    disjointInterval.push({
+    end = start;
+
+    while (true) {
+      end = successor(end);
+
+      if (order(end, maxSize) >= 0 || Math.random() > 0.8) {
+        break;
+      }
+    }
+
+    disjointInterval = addToDisjointIntervalCanonically({ order: order }, {
       kind: "closed_exclusive",
       start,
       end,
-    });
+    }, disjointInterval);
 
-    if (order(end, maxSize) >= 0) {
+    if (Math.random() > 0.95) {
       break;
     }
+  }
+
+  const isOpen = order(end, maxSize) < 0 && Math.random() > 0.8;
+
+  if (isOpen) {
+    let openStart = end;
+
+    while (true) {
+      openStart = successor(openStart);
+
+      if (order(end, maxSize) >= 0 || Math.random() > 0.9) {
+        break;
+      }
+    }
+
+    disjointInterval = addToDisjointIntervalCanonically({ order: order }, {
+      kind: "open",
+      start,
+    }, disjointInterval);
   }
 
   return disjointInterval;

@@ -472,15 +472,6 @@ Deno.test("intersect3dProducts", () => {
 });
 
 Deno.test("merge3dProducts", () => {
-  // Okay we've tested mergeDisjointRanges...
-  // and isEqualDisjointRange
-  // this test is not as thorough as I'd like
-  // TODO: Generate random products, make two dimensions match
-  // Compare the merged non-matching dimension with addToDisjointRange result
-
-  // Until then...
-  // If any pairs match, return the merged version
-
   for (let i = 0; i < 200; i++) {
     const twoDimensionsMatch = Math.random() > 0.5;
 
@@ -602,7 +593,7 @@ Deno.test("merge3dProducts", () => {
 
         assertEquals(
           Array.from(expected).toSorted(orderNumber),
-          actual,
+          actual.toSorted(orderNumber),
         );
       } else if (dimToModify === "path") {
         const included1 = getIncludedValuesDisjointInterval({
@@ -658,7 +649,7 @@ Deno.test("merge3dProducts", () => {
 
         assertEquals(
           expected.toSorted(orderPaths),
-          actual,
+          actual.toSorted(orderPaths),
         );
       } else {
         const included1 = getIncludedValuesDisjointInterval({
@@ -698,7 +689,7 @@ Deno.test("merge3dProducts", () => {
 
         assertEquals(
           Array.from(expected).toSorted(orderTimestamps),
-          actual,
+          actual.toSorted(orderTimestamps),
         );
       }
 

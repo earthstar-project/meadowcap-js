@@ -20,7 +20,7 @@ import {
 } from "../test/util.ts";
 import {
   addTo3dProduct,
-  addToDisjointIntervalCanonically,
+  addToDisjointInterval,
   canonicProduct,
   intersect3dProducts,
   intersectDisjointIntervals,
@@ -70,7 +70,7 @@ Deno.test("addToDisjointRange", () => {
         }
       }
 
-      const newDisjointRange = addToDisjointIntervalCanonically(
+      const newDisjointRange = addToDisjointInterval(
         { order: orderNumber },
         newRange,
         disjointInterval,

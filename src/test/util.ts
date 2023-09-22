@@ -6,7 +6,7 @@ import {
 } from "../order/predecessors.ts";
 import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
 import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
-import { addToDisjointIntervalCanonically } from "../products/products.ts";
+import { addToDisjointInterval } from "../products/products.ts";
 import {
   DisjointInterval,
   ThreeDimensionalProduct,
@@ -332,7 +332,7 @@ export function getRandomDisjointInterval<ValueType>(
       }
     }
 
-    disjointInterval = addToDisjointIntervalCanonically({ order: order }, {
+    disjointInterval = addToDisjointInterval({ order: order }, {
       kind: "closed_exclusive",
       start,
       end,
@@ -356,7 +356,7 @@ export function getRandomDisjointInterval<ValueType>(
       }
     }
 
-    disjointInterval = addToDisjointIntervalCanonically({ order: order }, {
+    disjointInterval = addToDisjointInterval({ order: order }, {
       kind: "open",
       start,
     }, disjointInterval);

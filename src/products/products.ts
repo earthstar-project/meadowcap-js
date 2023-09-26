@@ -11,6 +11,7 @@ import {
   predecessorPath,
   predecessorTimestamp,
 } from "../order/predecessors.ts";
+import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
 import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
 import { getSmallerFromExclusiveRange } from "../ranges/ranges.ts";
 import { Range } from "../ranges/types.ts";
@@ -633,5 +634,69 @@ export function canonicProduct<SubspaceIdType>(
     subspaceDisjointRange,
     pathDisjointRange,
     timeDisjointRange,
+  ];
+}
+
+export function decanoniciseProduct<SubspaceIdType>(
+  { maxPathLength, successorSubspace }: {
+    maxPathLength: number;
+    successorSubspace: SuccessorFn<SubspaceIdType>;
+  },
+  prod: CanonicProduct<SubspaceIdType>,
+): ThreeDimensionalProduct<SubspaceIdType> {
+  const [subspaceDisjointRange, pathDisjointRange, timeDisjointRange] = prod;
+
+  // Subspace encoding smaller
+  const subspaceDisjointInterval: DisjointInterval<SubspaceIdType> = [];
+
+  for (const range of subspaceDisjointRange) {
+    if (range.kind !== "closed_inclusive") {
+      subspaceDisjointInterval.push(range);
+      continue;
+    }
+
+    subspaceDisjointInterval.push({
+      kind: "closed_exclusive",
+      start: range.start,
+      end: successorSubspace(range.end),
+    });
+  }
+
+  // Path encoding smaller
+  const pathDisjointInterval: DisjointInterval<Uint8Array> = [];
+
+  for (const range of pathDisjointRange) {
+    if (range.kind !== "closed_inclusive") {
+      pathDisjointInterval.push(range);
+      continue;
+    }
+
+    pathDisjointInterval.push({
+      kind: "closed_exclusive",
+      start: range.start,
+      end: makeSuccessorPath(maxPathLength)(range.end),
+    });
+  }
+
+  // Time must be exclusive.
+  const timeDisjointInterval: DisjointInterval<bigint> = [];
+
+  for (const range of timeDisjointRange) {
+    if (range.kind !== "closed_inclusive") {
+      timeDisjointInterval.push(range);
+      continue;
+    }
+
+    timeDisjointInterval.push({
+      kind: "closed_exclusive",
+      start: range.start,
+      end: successorTimestamp(range.end),
+    });
+  }
+
+  return [
+    subspaceDisjointInterval,
+    pathDisjointInterval,
+    timeDisjointInterval,
   ];
 }

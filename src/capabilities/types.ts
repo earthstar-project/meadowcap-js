@@ -1,4 +1,4 @@
-import { ThreeDimensionalProduct } from "../products/types.ts";
+import { CanonicProduct, ThreeDimensionalProduct } from "../products/types.ts";
 
 export type AccessMode = "read" | "write";
 

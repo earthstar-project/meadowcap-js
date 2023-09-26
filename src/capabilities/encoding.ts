@@ -2,6 +2,7 @@ import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
 import {
   addRangeToDisjointInterval,
   canonicProduct,
+  decanoniciseProduct,
   hasOpenRange,
 } from "../products/products.ts";
 import { CanonicProduct, DisjointInterval } from "../products/types.ts";
@@ -23,24 +24,19 @@ export function encodeCapability<
   AuthorPublicKey,
   AuthorSignature,
 >(
-  {
-    encodeNamespace,
-    encodeSubspace,
-    isCommunalFn,
-    orderSubspace,
-    encodePath,
-    encodePathLength,
-    encodeAuthorPublicKey,
-    encodeAuthorSignature,
-  }: {
+  config: {
     encodeNamespace: (namespace: NamespacePublicKey) => Uint8Array;
     encodeSubspace: (subspace: SubspacePublicKey) => Uint8Array;
     isCommunalFn: IsCommunalFn<NamespacePublicKey>;
     orderSubspace: TotalOrder<SubspacePublicKey>;
     encodePathLength: (num: number) => Uint8Array;
-    encodePath: (path: Uint8Array) => Uint8Array;
     encodeAuthorPublicKey: (key: AuthorPublicKey) => Uint8Array;
     encodeAuthorSignature: (key: AuthorSignature) => Uint8Array;
+    isInclusiveSmallerSubspace: (
+      incl: SubspacePublicKey,
+      excl: SubspacePublicKey,
+    ) => boolean;
+    predecessorSubspace: PredecessorFn<SubspacePublicKey>;
   },
   cap: Capability<
     NamespacePublicKey,
@@ -52,7 +48,7 @@ export function encodeCapability<
   // read / write type byte
   let readWriteTypeBits = 0;
 
-  const accessMode = getAccessMode(cap, isCommunalFn);
+  const accessMode = getAccessMode(cap, config.isCommunalFn);
 
   if (accessMode === "write") {
     readWriteTypeBits |= 1 << 7;
@@ -63,10 +59,10 @@ export function encodeCapability<
       readWriteTypeBits |= 0x7f;
       break;
     case "delegation":
-      readWriteTypeBits |= 0x7d;
+      readWriteTypeBits |= 0x7e;
       break;
     case "restriction":
-      readWriteTypeBits |= 0x7e;
+      readWriteTypeBits |= 0x7d;
       break;
     case "merge": {
       if (cap.components.length < 123) {
@@ -87,7 +83,7 @@ export function encodeCapability<
 
   const namespace = getNamespace(cap);
 
-  const encodedNamespace = encodeNamespace(namespace);
+  const encodedNamespace = config.encodeNamespace(namespace);
 
   // switch on cap type...
 
@@ -95,69 +91,62 @@ export function encodeCapability<
 
   switch (cap.kind) {
     case "source": {
-      if (isCommunalFn(namespace)) {
-        encodedCapability = encodeSubspace(cap.subspaceId);
+      if (config.isCommunalFn(namespace)) {
+        encodedCapability = config.encodeSubspace(cap.subspaceId);
       }
       break;
     }
     case "delegation": {
       encodedCapability = concat(
-        encodeCapability({
-          encodeNamespace,
-          encodeSubspace,
-          isCommunalFn,
-          orderSubspace,
-          encodePathLength,
-          encodePath,
-          encodeAuthorPublicKey,
-          encodeAuthorSignature,
-        }, cap.parent),
+        encodeCapability(config, cap.parent),
         new Uint8Array([cap.delegationLimit]),
-        encodeAuthorPublicKey(cap.delegee),
-        encodeAuthorSignature(cap.authorisation),
+        config.encodeAuthorPublicKey(cap.delegee),
+        config.encodeAuthorSignature(cap.authorisation),
       );
       break;
     }
     case "restriction": {
-      encodedCapability = concat(
-        encodeCapability({
-          encodeNamespace,
-          encodeSubspace,
-          isCommunalFn,
-          orderSubspace,
-          encodePath,
-          encodePathLength,
-          encodeAuthorPublicKey,
-          encodeAuthorSignature,
-        }, cap.parent),
-        encodeProduct({
-          encodeSubspace,
-          orderSubspace,
+      const restrictionProduct = canonicProduct({
+        predecessorSubspace: config.predecessorSubspace,
+        isInclusiveSmallerSubspace: config.isInclusiveSmallerSubspace,
+      }, cap.product);
 
-          encodePathLength,
-        }, cap.product),
+      encodedCapability = concat(
+        encodeCapability(config, cap.parent),
+        encodeProduct(config, restrictionProduct),
       );
       break;
     }
     case "merge": {
+      let componentLenEncoded = new Uint8Array();
+
+      if (cap.components.length < 123) {
+        // Do nothing.
+      } else if (cap.components.length < 256) {
+        componentLenEncoded = new Uint8Array([cap.components.length]);
+      } else if (cap.components.length < 65536) {
+        componentLenEncoded = new Uint8Array(2);
+        const view = new DataView(componentLenEncoded.buffer);
+        view.setUint16(0, cap.components.length);
+      } else if (cap.components.length < 4294967296) {
+        componentLenEncoded = new Uint8Array(4);
+        const view = new DataView(componentLenEncoded.buffer);
+        view.setUint32(0, cap.components.length);
+      } else {
+        componentLenEncoded = new Uint8Array(8);
+        const view = new DataView(componentLenEncoded.buffer);
+        view.setBigUint64(0, BigInt(cap.components.length));
+      }
+
       const encodedComponents: Uint8Array[] = [];
 
       for (const component of cap.components) {
         encodedComponents.push(
-          encodeCapability({
-            encodeNamespace,
-            encodeSubspace,
-            isCommunalFn,
-            orderSubspace,
-            encodePath,
-            encodePathLength,
-            encodeAuthorSignature,
-            encodeAuthorPublicKey,
-          }, component),
+          encodeCapability(config, component),
         );
       }
 
-      encodedCapability = concat(...encodedComponents);
+      encodedCapability = concat(componentLenEncoded, ...encodedComponents);
     }
   }
 
@@ -166,6 +155,215 @@ export function encodeCapability<
     encodedNamespace,
     encodedCapability,
   );
+}
+
+export function decodeCapability<
+  NamespacePublicKey,
+  SubspacePublicKey,
+  AuthorPublicKey,
+  AuthorSignature,
+>(
+  config: {
+    isCommunalFn: IsCommunalFn<NamespacePublicKey>;
+    decodeNamespace: (encoded: Uint8Array) => NamespacePublicKey;
+    decodeSubspace: (encoded: Uint8Array) => SubspacePublicKey;
+    namespaceKeyLength: number;
+
+    authorPubkeyLength: number;
+    minimalSubspaceKey: SubspacePublicKey;
+    encodedSubspaceLength: number;
+    orderSubspace: TotalOrder<SubspacePublicKey>;
+    predecessorSubspace: PredecessorFn<SubspacePublicKey>;
+    successorSubspace: SuccessorFn<SubspacePublicKey>;
+    isInclusiveSmallerSubspace: (
+      inclusive: SubspacePublicKey,
+      exclusive: SubspacePublicKey,
+    ) => boolean;
+    pathBitIntLength: number;
+    maxPathLength: number;
+    decodePathLength: (encoding: Uint8Array) => number;
+    decodeAuthorPubKey: (encoding: Uint8Array) => AuthorPublicKey;
+    decodeAuthorSignature: (encoding: Uint8Array) => AuthorSignature;
+    authorSigLength: number;
+  },
+  encodedCapability: Uint8Array,
+): {
+  capability: Capability<
+    NamespacePublicKey,
+    SubspacePublicKey,
+    AuthorPublicKey,
+    AuthorSignature
+  >;
+  length: number;
+} {
+  // get access mode
+
+  const accessMode = (encodedCapability[0] & 0x80) === 0x80 ? "write" : "read";
+
+  const namespaceId = config.decodeNamespace(
+    encodedCapability.slice(1, 1 + config.namespaceKeyLength),
+  );
+
+  const isSource = (encodedCapability[0] & 0x7f) === 0x7f;
+
+  if (isSource) {
+    const isCommunualNamespace = config.isCommunalFn(namespaceId);
+
+    return {
+      capability: {
+        kind: "source",
+        accessMode,
+        namespaceId,
+        subspaceId: isCommunualNamespace
+          ? config.decodeSubspace(
+            encodedCapability.slice(
+              1 + config.namespaceKeyLength,
+              1 + config.namespaceKeyLength + config.encodedSubspaceLength,
+            ),
+          )
+          : config.minimalSubspaceKey,
+      },
+      length: 1 + config.namespaceKeyLength +
+        (isCommunualNamespace ? config.encodedSubspaceLength : 0),
+    };
+  }
+
+  const isDelegation = (encodedCapability[0] & 0x7e) === 0x7e;
+
+  if (isDelegation) {
+    const { capability: parentCap, length: parentLength } = decodeCapability<
+      NamespacePublicKey,
+      SubspacePublicKey,
+      AuthorPublicKey,
+      AuthorSignature
+    >(config, encodedCapability.slice(1 + config.namespaceKeyLength));
+
+    const delegationLimit =
+      encodedCapability[1 + config.namespaceKeyLength + parentLength];
+
+    const delegee = config.decodeAuthorPubKey(
+      encodedCapability.slice(1 + config.namespaceKeyLength + parentLength + 1),
+    );
+
+    const authorisation = config.decodeAuthorSignature(
+      encodedCapability.slice(
+        1 + config.namespaceKeyLength + parentLength + 1 +
+          config.authorPubkeyLength,
+      ),
+    );
+
+    return {
+      capability: {
+        kind: "delegation",
+        parent: parentCap,
+        delegationLimit: delegationLimit,
+        delegee,
+        authorisation,
+      },
+      length: 1 + config.namespaceKeyLength + parentLength + 1 +
+        config.authorPubkeyLength +
+        config.authorSigLength,
+    };
+  }
+
+  const isRestriction = (encodedCapability[0] & 0x7d) === 0x7d;
+
+  if (isRestriction) {
+    const { capability: parentCap, length: parentLength } = decodeCapability<
+      NamespacePublicKey,
+      SubspacePublicKey,
+      AuthorPublicKey,
+      AuthorSignature
+    >(config, encodedCapability.slice(1 + config.namespaceKeyLength));
+
+    const { product: restrictionProduct, length: productLength } =
+      decodeProduct(
+        config,
+        encodedCapability.slice(1 + config.namespaceKeyLength + parentLength),
+      );
+
+    return {
+      capability: {
+        kind: "restriction",
+        parent: parentCap,
+        product: decanoniciseProduct({
+          maxPathLength: config.maxPathLength,
+          successorSubspace: config.successorSubspace,
+        }, restrictionProduct),
+      },
+      length: 1 + config.namespaceKeyLength + parentLength + productLength,
+    };
+  }
+
+  // it's a merge one.
+
+  // Now determine what the merge length is
+  let componentCount = 0;
+
+  const componentCountIndicator =
+    (encodedCapability[0] === 0x0 || encodedCapability[0] === 0x80)
+      ? 0
+      : accessMode === "read"
+      ? encodedCapability[0]
+      : encodedCapability[0] ^ 0x80;
+  let componentCountIndicatorLen = 0;
+
+  if (componentCountIndicator <= 120) {
+    componentCount = componentCountIndicator + 2;
+  } else if (componentCountIndicator === 121) {
+    const view = new DataView(encodedCapability.buffer);
+
+    componentCount = view.getUint8(1 + config.namespaceKeyLength);
+    componentCountIndicatorLen = 1;
+  } else if (componentCountIndicator === 122) {
+    const view = new DataView(encodedCapability.buffer);
+
+    componentCount = view.getUint16(1 + config.namespaceKeyLength);
+    componentCountIndicatorLen = 2;
+  } else if (componentCountIndicator === 123) {
+    const view = new DataView(encodedCapability.buffer);
+
+    componentCount = view.getUint32(1 + config.namespaceKeyLength);
+    componentCountIndicatorLen = 4;
+  } else if (componentCountIndicator === 124) {
+    const view = new DataView(encodedCapability.buffer);
+
+    componentCount = Number(view.getBigUint64(1 + config.namespaceKeyLength));
+    componentCountIndicatorLen = 8;
+  }
+
+  const mergedComponents = [];
+
+  let decodedBytesSoFar = 0;
+
+  while (
+    mergedComponents.length < componentCount
+  ) {
+    const toDecode = encodedCapability.slice(
+      1 + config.namespaceKeyLength +
+        componentCountIndicatorLen + decodedBytesSoFar,
+    );
+
+    const { capability, length } = decodeCapability<
+      NamespacePublicKey,
+      SubspacePublicKey,
+      AuthorPublicKey,
+      AuthorSignature
+    >(config, toDecode);
+
+    decodedBytesSoFar += length;
+
+    mergedComponents.push(capability);
+  }
+
+  return {
+    capability: {
+      kind: "merge",
+      components: mergedComponents,
+    },
+    length: 1 + config.namespaceKeyLength +
+      componentCountIndicatorLen + decodedBytesSoFar,
+  };
 }
 
 export function encodeProduct<SubspaceId>(
@@ -428,8 +626,6 @@ function commonPrefixLength(a: Uint8Array, b: Uint8Array): number {
   return shortestLength;
 }
 
-// Decoding - unfinished but leaving here JUST IN CASE
-
 export function decodeProduct<
   SubspaceIdType,
 >(
@@ -437,8 +633,8 @@ export function decodeProduct<
     encodedSubspaceLength,
     decodeSubspace,
     orderSubspace,
-    getPredecessorSubspace,
-    getSuccessorSubspace,
+    predecessorSubspace,
+    successorSubspace,
     isInclusiveSmallerSubspace,
     pathBitIntLength,
     maxPathLength,
@@ -447,8 +643,8 @@ export function decodeProduct<
     encodedSubspaceLength: number;
     decodeSubspace: (encodedSubspace: Uint8Array) => SubspaceIdType;
     orderSubspace: TotalOrder<SubspaceIdType>;
-    getPredecessorSubspace: PredecessorFn<SubspaceIdType>;
-    getSuccessorSubspace: SuccessorFn<SubspaceIdType>;
+    predecessorSubspace: PredecessorFn<SubspaceIdType>;
+    successorSubspace: SuccessorFn<SubspaceIdType>;
     isInclusiveSmallerSubspace: (
       inclusive: SubspaceIdType,
       exclusive: SubspaceIdType,
@@ -458,10 +654,10 @@ export function decodeProduct<
     decodePathLength: (encoding: Uint8Array) => number;
   },
   encodedProduct: Uint8Array,
-): CanonicProduct<SubspaceIdType> {
+): { product: CanonicProduct<SubspaceIdType>; length: number } {
   // Decode empty product.
   if (encodedProduct.byteLength === 1 && encodedProduct[0] === 255) {
-    return [[], [], []];
+    return { product: [[], [], []], length: 1 };
   }
 
   const encodedProductView = new DataView(encodedProduct.buffer);
@@ -569,8 +765,8 @@ export function decodeProduct<
         subspaceDisjoint = addRangeToDisjointInterval(
           {
             order: orderSubspace,
-            successor: getSuccessorSubspace,
-            predecessor: getPredecessorSubspace,
+            successor: successorSubspace,
+            predecessor: predecessorSubspace,
             isInclusiveSmaller: isInclusiveSmallerSubspace,
           },
           range,
@@ -594,8 +790,8 @@ export function decodeProduct<
         subspaceDisjoint = addRangeToDisjointInterval(
           {
             order: orderSubspace,
-            successor: getSuccessorSubspace,
-            predecessor: getPredecessorSubspace,
+            successor: successorSubspace,
+            predecessor: predecessorSubspace,
             isInclusiveSmaller: isInclusiveSmallerSubspace,
           },
           {
@@ -835,15 +1031,19 @@ export function decodeProduct<
         range,
         timeDisjoint,
       );
-
-      pathChunksPos += encodedSubspaceLength;
     }
   }
 
-  return canonicProduct({
-    isInclusiveSmallerSubspace,
-    predecessorSubspace: getPredecessorSubspace,
-  }, [subspaceDisjoint, pathDisjoint, timeDisjoint]);
+  const finalLength = timeChunksPos + (16 * timeLength) +
+    (hasOpenTimeRange ? -8 : 0);
+
+  return {
+    product: canonicProduct({
+      isInclusiveSmallerSubspace,
+      predecessorSubspace: predecessorSubspace,
+    }, [subspaceDisjoint, pathDisjoint, timeDisjoint]),
+    length: finalLength,
+  };
 }
 
 function commonSuffix(

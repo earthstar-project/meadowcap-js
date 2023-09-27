@@ -1,8 +1,17 @@
+import { concat } from "$std/bytes/concat.ts";
+import { equals as equalsBytes } from "$std/bytes/equals.ts";
 import { encodeCapability } from "../capabilities/encoding.ts";
+import {
+  getAccessMode,
+  getDelegationLimit,
+  getGrantedProduct,
+  getReceiver,
+} from "../capabilities/semantics.ts";
 import {
   AccessMode,
   Capability,
   DelegationCap,
+  IsCommunalFn,
   MergeCap,
   RestrictionCap,
   SourceCap,
@@ -374,15 +383,11 @@ export function getRandomDisjointInterval<ValueType>(
   return disjointInterval;
 }
 
-export function getRandom3dProduct<ValueType>(
-  { minValue, successor, order, maxSize, noEmpty }: {
-    minValue: ValueType;
-    successor: SuccessorFn<ValueType>;
-    maxSize: ValueType;
-    order: TotalOrder<ValueType>;
+export function getRandom3dProduct(
+  { noEmpty }: {
     noEmpty?: boolean;
   },
-): ThreeDimensionalProduct<ValueType> {
+): ThreeDimensionalProduct<number> {
   const isEmpty = Math.random() > 0.75;
 
   if (!noEmpty && isEmpty) {
@@ -391,10 +396,10 @@ export function getRandom3dProduct<ValueType>(
 
   return [
     getRandomDisjointInterval({
-      minValue,
-      maxSize,
-      order,
-      successor,
+      minValue: 0,
+      maxSize: 100,
+      order: orderNumber,
+      successor: successorNumber,
     }),
     getRandomDisjointInterval({
       minValue: new Uint8Array(),
@@ -409,6 +414,134 @@ export function getRandom3dProduct<ValueType>(
       successor: successorTimestamp,
     }),
   ];
+}
+
+function getRandomSubInterval<ValueType>({ order, predecessor, successor }: {
+  order: TotalOrder<ValueType>;
+  predecessor: PredecessorFn<ValueType>;
+  successor: SuccessorFn<ValueType>;
+}, interval: Interval<ValueType>): Interval<ValueType> {
+  if (interval.kind === "open") {
+    let nextVal = interval.start;
+
+    while (true) {
+      if (Math.random() > 0.8) {
+        nextVal = successor(nextVal);
+      }
+
+      return {
+        kind: "open",
+        start: nextVal,
+      };
+    }
+  }
+
+  let nextStart = interval.start;
+  let nextEnd = interval.end;
+
+  while (true) {
+    const roll = Math.random();
+
+    if (roll >= 0.66) {
+      const nextStartCandidate = successor(nextStart);
+
+      if (order(nextStartCandidate, nextEnd) < 0) {
+        nextStart = nextStartCandidate;
+      } else {
+        break;
+      }
+    } else if (roll >= 0.33) {
+      const nextEndCandidate = predecessor(nextStart);
+
+      if (order(nextEndCandidate, nextStart) > 0) {
+        nextEnd = nextEndCandidate;
+      } else {
+        break;
+      }
+    }
+  }
+
+  return {
+    kind: "closed_exclusive",
+    start: nextStart,
+    end: nextEnd,
+  };
+}
+
+function getRandomSubDisjointInterval<ValueType>(opts: {
+  order: TotalOrder<ValueType>;
+  predecessor: PredecessorFn<ValueType>;
+  successor: SuccessorFn<ValueType>;
+}, disjointInterval: DisjointInterval<ValueType>): DisjointInterval<ValueType> {
+  const next = [];
+
+  for (const interval of disjointInterval) {
+    next.push(getRandomSubInterval(opts, interval));
+  }
+
+  return next;
+}
+
+export function getRandomRestrictionProduct(
+  product: ThreeDimensionalProduct<number>,
+): ThreeDimensionalProduct<number> {
+  return [
+    product[0],
+    product[1],
+    getRandomSubDisjointInterval({
+      order: orderTimestamps,
+      predecessor: predecessorTimestamp,
+      successor: successorTimestamp,
+    }, product[2]),
+  ];
+}
+
+export function getPairwiseMergeable3dProduct(
+  { dimensionToChange }: {
+    dimensionToChange?: "subspace" | "path" | "time";
+  },
+  product: ThreeDimensionalProduct<number>,
+): ThreeDimensionalProduct<number> {
+  const dimRoll = Math.random();
+
+  const dim = dimensionToChange ||
+    (dimRoll >= 0.66 ? "subspace" : dimRoll >= 0.33 ? "path" : "time");
+
+  if (dim === "subspace") {
+    return [
+      getRandomDisjointInterval({
+        minValue: 0,
+        maxSize: 100,
+        order: orderNumber,
+        successor: successorNumber,
+      }),
+      product[1],
+      product[2],
+    ];
+  } else if (dim === "path") {
+    return [
+      product[0],
+      getRandomDisjointInterval({
+        minValue: new Uint8Array(),
+        maxSize: new Uint8Array([0, 0, 0, 255]),
+        order: orderPaths,
+        successor: makeSuccessorPath(4),
+      }),
+      product[2],
+    ];
+  }
+
+  return [
+    product[0],
+    product[1],
+    getRandomDisjointInterval({
+      minValue: BigInt(0),
+      maxSize: BigInt(1000),
+      order: orderTimestamps,
+      successor: successorTimestamp,
+    }),
+  ];
+  // Change the time dim.
 }
 
 export function getIncludedValues<ValueType>({ max, order, successor }: {
@@ -579,64 +712,88 @@ export function randomSourceCap(
   };
 }
 
-export function randomDelegateCap(options: {
-  mode?: AccessMode;
-  namespaceId?: number;
-  subspaceId?: number;
+export async function randomDelegateCap(options: {
+  delegee?: number;
+  parentCap?: Capability<number, number, number, Uint8Array>;
+  noMerge?: boolean;
   depthMaxDepth: [number, number];
-}): DelegationCap<number, number, number, number> {
-  const parentCap = randomCap(options);
+}): Promise<DelegationCap<number, number, number, Uint8Array>> {
+  const parentCap = options.parentCap ? options.parentCap : await randomCap({
+    ...options,
+    depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
+  });
 
-  const delegationLimit = parentCap.kind === "delegation"
-    ? parentCap.delegationLimit
-    : 255;
+  const delegee = options.delegee !== undefined ? options.delegee : randomId();
+
+  const parentDelegationLimit = getDelegationLimit(parentCap);
 
   return {
     kind: "delegation",
-    parent: randomCap({
-      ...options,
-      depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
-    }),
-    delegationLimit,
-    delegee: randomId(),
-    authorisation: 0,
+    parent: parentCap,
+    delegationLimit: parentDelegationLimit - 1,
+    delegee: delegee,
+    authorisation: testSign(
+      testEncodeAuthor(getReceiver(parentCap, testIsCommunalFn)),
+      concat(
+        await testHash(
+          encodeCapability(
+            {
+              encodeAuthorPublicKey: testEncodeAuthor,
+              encodeNamespace: testEncodeNamespace,
+              encodeSubspace: testEncodeSubspace,
+              encodePathLength: testEncodePathLength,
+              isCommunalFn: testIsCommunalFn,
+              isInclusiveSmallerSubspace: () => false,
+              orderSubspace: orderNumber,
+              predecessorSubspace: testPredecessorSubspace,
+              encodeAuthorSignature: testEncodeAuthorSignature,
+            },
+            parentCap,
+          ),
+        ),
+        new Uint8Array([parentDelegationLimit - 1]),
+        testEncodeAuthor(delegee),
+      ),
+    ),
   };
 }
 
-export function randomRestrictionCap(options: {
-  mode?: AccessMode;
-  namespaceId?: number;
-  subspaceId?: number;
+export async function randomRestrictionCap(options: {
+  parentCap?: Capability<number, number, number, Uint8Array>;
+  noMerge?: boolean;
   depthMaxDepth: [number, number];
-}): RestrictionCap<
-  number,
-  number,
-  number,
-  number
+}): Promise<
+  RestrictionCap<
+    number,
+    number,
+    number,
+    Uint8Array
+  >
 > {
+  const parentCap = options.parentCap || await randomCap({
+    ...options,
+    depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
+  });
+
   return {
     kind: "restriction",
-    parent: randomCap({
-      ...options,
-      depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
-    }),
-    product: getRandom3dProduct({
-      maxSize: 100,
-      minValue: 0,
-      noEmpty: true,
-      order: orderNumber,
-      successor: successorNumber,
-    }),
+    parent: parentCap,
+    product: getRandomRestrictionProduct(getGrantedProduct({
+      isCommunalFn: testIsCommunalFn,
+      minimalSubspaceKey: 0,
+      orderSubspace: orderNumber,
+      successorSubspace: successorNumber,
+    }, parentCap)),
   };
 }
 
-export function randomMergeCap(options: {
+export async function randomMergeCap(options: {
   mode?: AccessMode;
   namespaceId?: number;
   subspaceId?: number;
   depthMaxDepth: [number, number];
-}): MergeCap<number, number, number, number> {
-  const components: Capability<number, number, number, number>[] = [];
+}): Promise<MergeCap<number, number, number, Uint8Array>> {
+  const components: Capability<number, number, number, Uint8Array>[] = [];
 
   const mode = options.mode || randomAccessMode();
   const namespaceId = options.namespaceId || randomId();
@@ -644,14 +801,128 @@ export function randomMergeCap(options: {
 
   const componentsLen = Math.floor(Math.random() * (512 - 2) + 2);
 
-  for (let i = 0; i < componentsLen; i++) {
-    components.push(randomCap({
-      mode,
-      namespaceId,
-      subspaceId,
-      noMerge: true,
-      depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
-    }));
+  const firstCap = await randomCap({
+    mode,
+    namespaceId,
+    subspaceId,
+    noMerge: true,
+    depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
+  });
+
+  components.push(firstCap);
+
+  switch (firstCap.kind) {
+    case "source": {
+      // same receiver rule: others can be restriction only.
+
+      const grantedProduct = getGrantedProduct({
+        isCommunalFn: testIsCommunalFn,
+        minimalSubspaceKey: TEST_MINIMAL_SUBSPACE_KEY,
+        orderSubspace: orderNumber,
+        successorSubspace: successorNumber,
+      }, firstCap);
+
+      for (let i = 0; i < componentsLen; i++) {
+        components.push(
+          {
+            kind: "restriction",
+            parent: firstCap,
+            product: getPairwiseMergeable3dProduct(
+              { dimensionToChange: "time" },
+              grantedProduct,
+            ),
+          },
+        );
+      }
+
+      break;
+    }
+    case "delegation": {
+      // same receiver rule: others can be delegation, or restriction of delegation of same author.
+
+      const parentOfFirst = firstCap.parent;
+
+      const grantedProduct = getGrantedProduct({
+        isCommunalFn: testIsCommunalFn,
+        minimalSubspaceKey: TEST_MINIMAL_SUBSPACE_KEY,
+        orderSubspace: orderNumber,
+        successorSubspace: successorNumber,
+      }, parentOfFirst);
+
+      const kindRoll = Math.random();
+
+      for (let i = 0; i < componentsLen; i++) {
+        if (kindRoll >= 0.5) {
+          components.push(
+            await randomDelegateCap({
+              parentCap: parentOfFirst,
+              delegee: firstCap.delegee,
+              noMerge: true,
+              depthMaxDepth: [
+                options.depthMaxDepth[0] + 1,
+                options.depthMaxDepth[1],
+              ],
+            }),
+          );
+        } else {
+          components.push(
+            {
+              kind: "restriction",
+              parent: firstCap,
+              product: getPairwiseMergeable3dProduct(
+                { dimensionToChange: "time" },
+                grantedProduct,
+              ),
+            },
+          );
+        }
+      }
+
+      break;
+    }
+
+    case "restriction": {
+      const receiverRootCap = getReceiverRoot(firstCap);
+      const grantedProduct = getGrantedProduct({
+        isCommunalFn: testIsCommunalFn,
+        minimalSubspaceKey: TEST_MINIMAL_SUBSPACE_KEY,
+        orderSubspace: orderNumber,
+        successorSubspace: successorNumber,
+      }, firstCap);
+
+      for (let i = 0; i < componentsLen; i++) {
+        // Same receiver rule: others can be restriction of same source...
+        if (receiverRootCap.kind === "source") {
+          components.push(
+            {
+              kind: "restriction",
+              parent: receiverRootCap,
+              product: getPairwiseMergeable3dProduct(
+                { dimensionToChange: "time" },
+                grantedProduct,
+              ),
+            },
+          );
+        } else {
+          // same receiver rule: ... or a delegation / restriction cap with the same delegee
+
+          components.push(
+            await randomCap({
+              mode,
+              depthMaxDepth: [
+                options.depthMaxDepth[0] + 1,
+                options.depthMaxDepth[1],
+              ],
+              namespaceId: namespaceId,
+              subspaceId: subspaceId,
+              parentCap: receiverRootCap,
+              delegee: receiverRootCap.delegee,
+              noMerge: true,
+            }),
+          );
+        }
+      }
+    }
   }
 
   return {
@@ -660,23 +931,31 @@ export function randomMergeCap(options: {
   };
 }
 
-export function randomCap(options: {
+export async function randomCap(options: {
   mode?: AccessMode;
   namespaceId?: number;
   subspaceId?: number;
   noMerge?: boolean;
+  delegee?: number;
+  parentCap?: Capability<number, number, number, Uint8Array>;
   depthMaxDepth: [number, number];
-}): Capability<number, number, number, number> {
+}): Promise<Capability<number, number, number, Uint8Array>> {
   if (options.depthMaxDepth[0] >= options.depthMaxDepth[1]) {
     return randomSourceCap(options);
   }
 
   const roll = Math.random();
 
+  if (options.delegee !== undefined && roll >= 0.5) {
+    return await randomDelegateCap(options);
+  } else if (options.delegee !== undefined && roll >= 0) {
+    return randomRestrictionCap(options);
+  }
+
   if (roll >= 0.75) {
     return randomSourceCap(options);
   } else if (roll >= 0.5) {
-    return randomDelegateCap(options);
+    return await randomDelegateCap(options);
   } else if (roll >= 0.25) {
     return randomRestrictionCap(options);
   }
@@ -686,4 +965,268 @@ export function randomCap(options: {
   }
 
   return randomMergeCap(options);
+}
+
+export function randomSourceCapInvalid(): SourceCap<number, number> {
+  return {
+    kind: "source",
+    accessMode: randomAccessMode(),
+    namespaceId: randomId(),
+    subspaceId: Math.max(randomId(), 1),
+  };
+}
+
+export async function randomDelegateCapInvalid(options: {
+  depthMaxDepth: [number, number];
+}): Promise<DelegationCap<number, number, number, Uint8Array>> {
+  const parentCap = await randomCapInvalid({
+    ...options,
+    depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
+  });
+
+  const parentDelegationLimit = getDelegationLimit(parentCap);
+
+  return {
+    kind: "delegation",
+    parent: parentCap,
+    delegationLimit: parentDelegationLimit + 1,
+    delegee: randomId(),
+    authorisation: testSign(
+      testEncodeAuthor(getReceiver(parentCap, testIsCommunalFn)),
+      concat(
+        await testHash(
+          encodeCapability(
+            {
+              encodeAuthorPublicKey: testEncodeAuthor,
+              encodeNamespace: testEncodeNamespace,
+              encodeSubspace: testEncodeSubspace,
+              encodePathLength: testEncodePathLength,
+              isCommunalFn: testIsCommunalFn,
+              isInclusiveSmallerSubspace: () => false,
+              orderSubspace: orderNumber,
+              predecessorSubspace: testPredecessorSubspace,
+              encodeAuthorSignature: testEncodeAuthorSignature,
+            },
+            parentCap,
+          ),
+        ),
+        new Uint8Array([parentDelegationLimit - 2]),
+        testEncodeAuthor(randomId()),
+      ),
+    ),
+  };
+}
+
+export async function randomRestrictionCapInvalid(options: {
+  depthMaxDepth: [number, number];
+}): Promise<
+  RestrictionCap<
+    number,
+    number,
+    number,
+    Uint8Array
+  >
+> {
+  const parentCap = Math.random() >= 0.5
+    ? await randomDelegateCapInvalid({
+      ...options,
+      depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
+    })
+    : randomSourceCapInvalid();
+
+  return {
+    kind: "restriction",
+    parent: parentCap,
+    product: getRandom3dProduct({}),
+  };
+}
+
+export async function randomMergeCapInvalid(options: {
+  depthMaxDepth: [number, number];
+}): Promise<MergeCap<number, number, number, Uint8Array>> {
+  const components: Capability<number, number, number, Uint8Array>[] = [];
+
+  const componentsLen = Math.floor(Math.random() * (64 - 2) + 2);
+
+  for (let i = 0; i < componentsLen; i++) {
+    components.push(
+      await randomCapInvalid({
+        ...options,
+        depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
+      }),
+    );
+  }
+
+  return {
+    kind: "merge",
+    components,
+  };
+}
+
+export async function randomCapInvalid(options: {
+  depthMaxDepth: [number, number];
+}): Promise<Capability<number, number, number, Uint8Array>> {
+  if (options.depthMaxDepth[0] >= options.depthMaxDepth[1]) {
+    return randomSourceCapInvalid();
+  }
+
+  const roll = Math.random();
+
+  if (roll >= 0.75) {
+    return randomSourceCapInvalid();
+  } else if (roll >= 0.5) {
+    return await randomDelegateCapInvalid(options);
+  } else if (roll >= 0.25) {
+    return randomRestrictionCapInvalid(options);
+  }
+
+  return randomMergeCapInvalid(options);
+}
+
+export function testEncodeNamespace(namespace: number): Uint8Array {
+  const bytes = new Uint8Array(8);
+  const view = new DataView(bytes.buffer);
+  view.setBigUint64(0, BigInt(namespace));
+
+  return bytes;
+}
+
+export function testEncodeSubspace(number: number): Uint8Array {
+  const bytes = new Uint8Array(8);
+  const view = new DataView(bytes.buffer);
+  view.setBigUint64(0, BigInt(number));
+
+  return bytes;
+}
+
+export function testEncodeAuthor(number: number): Uint8Array {
+  const bytes = new Uint8Array(8);
+  const view = new DataView(bytes.buffer);
+  view.setBigUint64(0, BigInt(number));
+
+  return bytes;
+}
+
+export function testEncodeAuthorSignature(bytes: Uint8Array): Uint8Array {
+  return bytes;
+}
+
+export const testDecodeAuthorSignature = testEncodeAuthorSignature;
+
+export function testDecodeSubspace(encoded: Uint8Array): number {
+  const view = new DataView(encoded.buffer);
+  return Number(view.getBigUint64(0));
+}
+
+export function testIsCommunalFn(namespace: number): boolean {
+  return namespace < 128;
+}
+
+export function testEncodePathLength(length: number) {
+  return new Uint8Array([length]);
+}
+
+export function testDecodePathLength(bytes: Uint8Array) {
+  return bytes[0];
+}
+
+export async function testHash(encoded: Uint8Array): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", encoded));
+}
+
+export function testSuccessorSubspace(num: number) {
+  return Math.min(num + 1, 255);
+}
+
+export function testPredecessorSubspace(num: number) {
+  return Math.max(num - 1, 0);
+}
+
+export function testSign(
+  // The secret is just the pubkey, which is a number.
+  secretKey: Uint8Array,
+  bytestring: Uint8Array,
+): Uint8Array {
+  return concat(
+    bytestring,
+    secretKey,
+  );
+}
+
+export function testVerify(
+  pubKey: number,
+  signature: Uint8Array,
+  bytestring: Uint8Array,
+) {
+  return equalsBytes(signature, concat(bytestring, testEncodeAuthor(pubKey)));
+}
+
+export const TEST_MINIMAL_SUBSPACE_KEY = 0;
+
+export function getReceiverRoot<
+  NamespacePublicKey,
+  SubspacePublicKey,
+  AuthorPublicKey,
+  AuthorSignature,
+>(
+  cap: Capability<
+    NamespacePublicKey,
+    SubspacePublicKey,
+    AuthorPublicKey,
+    AuthorSignature
+  >,
+):
+  | SourceCap<
+    NamespacePublicKey,
+    SubspacePublicKey
+  >
+  | DelegationCap<
+    NamespacePublicKey,
+    SubspacePublicKey,
+    AuthorPublicKey,
+    AuthorSignature
+  > {
+  switch (cap.kind) {
+    case "source": {
+      return cap;
+    }
+    case "delegation": {
+      return cap;
+    }
+    case "restriction": {
+      return getReceiverRoot(cap.parent);
+    }
+    case "merge": {
+      return getReceiverRoot(cap.components[0]);
+    }
+  }
+}
+
+export function getDelegee<
+  NamespacePublicKey,
+  SubspacePublicKey,
+  AuthorPublicKey,
+  AuthorSignature,
+>(
+  cap: Capability<
+    NamespacePublicKey,
+    SubspacePublicKey,
+    AuthorPublicKey,
+    AuthorSignature
+  >,
+): AuthorPublicKey | null {
+  switch (cap.kind) {
+    case "source": {
+      return null;
+    }
+    case "delegation": {
+      return cap.delegee;
+    }
+    case "restriction": {
+      return getDelegee(cap.parent);
+    }
+    case "merge": {
+      return getDelegee(cap.components[0]);
+    }
+  }
 }

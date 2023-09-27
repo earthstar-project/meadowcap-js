@@ -1,4 +1,4 @@
-import { CanonicProduct, ThreeDimensionalProduct } from "../products/types.ts";
+import { ThreeDimensionalProduct } from "../products/types.ts";
 
 export type AccessMode = "read" | "write";
 
@@ -89,4 +89,15 @@ export type MergeCap<
 
 export type IsCommunalFn<NamespacePublicKey> = (
   pubkey: NamespacePublicKey,
+) => boolean;
+
+export type VerifyFn<
+  NamespacePublicKey,
+  SubspacePublicKey,
+  AuthorPublicKey,
+  AuthorSignature,
+> = (
+  pubKey: NamespacePublicKey | SubspacePublicKey | AuthorPublicKey,
+  signature: AuthorSignature,
+  bytestring: Uint8Array,
 ) => boolean;

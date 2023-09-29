@@ -1,5 +1,5 @@
 import { concat } from "$std/bytes/concat.ts";
-import { IsCommunalFn } from "../meadowcap/types.ts";
+import { IsCommunalFn, KeypairScheme } from "../meadowcap/types.ts";
 import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
 import { merge3dProducts } from "../products/products.ts";
 import { ThreeDimensionalProduct } from "../products/types.ts";
@@ -15,12 +15,28 @@ import { AccessMode, Capability } from "./types.ts";
 import { isCommunalDelegationCap } from "./util.ts";
 
 export async function isCapabilityValid<
+  NamespaceSeed,
   NamespacePublicKey,
+  NamespaceSecretKey,
   NamespaceSignature,
+  SubspaceSeed,
   SubspacePublicKey,
+  SubspaceSecretKey,
   SubspaceSignature,
 >(
   opts: {
+    namespaceScheme: KeypairScheme<
+      NamespaceSeed,
+      NamespacePublicKey,
+      NamespaceSecretKey,
+      NamespaceSignature
+    >;
+    subspaceScheme: KeypairScheme<
+      SubspaceSeed,
+      SubspacePublicKey,
+      SubspaceSecretKey,
+      SubspaceSignature
+    >;
     orderSubspace: TotalOrder<SubspacePublicKey>;
     predecessorSubspace: PredecessorFn<SubspacePublicKey>;
     successorSubspace: SuccessorFn<SubspacePublicKey>;
@@ -30,23 +46,7 @@ export async function isCapabilityValid<
     ) => boolean;
     isCommunalFn: IsCommunalFn<NamespacePublicKey>;
     minimalSubspaceKey: SubspacePublicKey;
-    encodeNamespacePublicKey: (key: NamespacePublicKey) => Uint8Array;
-    encodeNamespaceSignature: (signature: NamespaceSignature) => Uint8Array;
-    encodeSubspacePublicKey: (key: SubspacePublicKey) => Uint8Array;
-    encodeSubspaceSignature: (signature: SubspaceSignature) => Uint8Array;
-
     encodePathLength: (length: number) => Uint8Array;
-    verifySignatureNamespace: (
-      publicKey: NamespacePublicKey,
-      signature: NamespaceSignature,
-      bytestring: Uint8Array,
-    ) => boolean;
-    verifySignatureSubspace: (
-      publicKey: SubspacePublicKey,
-      signature: SubspaceSignature,
-      bytestring: Uint8Array,
-    ) => boolean;
-
     hashCapability: (encodedCap: Uint8Array) => Promise<Uint8Array>;
   },
   cap: Capability<
@@ -78,10 +78,8 @@ export async function isCapabilityValid<
       // Verify that the authorisation for this delegation is authentic.
 
       const hashedParent = await opts.hashCapability(encodeCapability({
-        encodeNamespacePublicKey: opts.encodeNamespacePublicKey,
-        encodeNamespaceSignature: opts.encodeNamespaceSignature,
-        encodeSubspacePublicKey: opts.encodeSubspacePublicKey,
-        encodeSubspaceSignature: opts.encodeSubspaceSignature,
+        namespaceEncodingScheme: opts.namespaceScheme.encodingScheme,
+        subspaceEncodingScheme: opts.subspaceScheme.encodingScheme,
         encodePathLength: opts.encodePathLength,
         isCommunalFn: opts.isCommunalFn,
         isInclusiveSmallerSubspace: opts.isInclusiveSmallerSubspace,
@@ -93,13 +91,13 @@ export async function isCapabilityValid<
       // use the subspace signature scheme
       // otherwise use the namespace signature scheme
       if (isCommunalDelegationCap(cap, opts.isCommunalFn)) {
-        const isValid = opts.verifySignatureSubspace(
+        const isValid = opts.subspaceScheme.signatureScheme.verify(
           getReceiver(cap.parent, opts.isCommunalFn) as SubspacePublicKey,
           cap.authorisation,
           concat(
             hashedParent,
             new Uint8Array([cap.delegationLimit]),
-            opts.encodeSubspacePublicKey(cap.delegee),
+            opts.subspaceScheme.encodingScheme.publicKey.encode(cap.delegee),
           ),
         );
 
@@ -107,13 +105,13 @@ export async function isCapabilityValid<
           return false;
         }
       } else {
-        const isValid = opts.verifySignatureNamespace(
+        const isValid = opts.namespaceScheme.signatureScheme.verify(
           getReceiver(cap.parent, opts.isCommunalFn) as NamespacePublicKey,
           cap.authorisation,
           concat(
             hashedParent,
             new Uint8Array([cap.delegationLimit]),
-            opts.encodeNamespacePublicKey(cap.delegee),
+            opts.namespaceScheme.encodingScheme.publicKey.encode(cap.delegee),
           ),
         );
 

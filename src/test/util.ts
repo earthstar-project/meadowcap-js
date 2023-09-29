@@ -15,7 +15,7 @@ import {
   SourceCap,
 } from "../capabilities/types.ts";
 import { Interval, ThreeDimensionalInterval } from "../intervals/types.ts";
-import { SignatureScheme } from "../meadowcap/types.ts";
+import { KeypairScheme, SignatureScheme } from "../meadowcap/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import {
   predecessorPath,
@@ -728,29 +728,31 @@ export async function randomDelegateCap(options: {
 
   const namespace = getNamespace(parentCap);
   const pubkeyEncode = testIsCommunalFn(namespace)
-    ? testEncodeSubspacePublicKey
-    : testEncodeNamespacePublicKey;
+    ? testSubspaceScheme.encodingScheme.publicKey.encode
+    : testNamespaceScheme.encodingScheme.publicKey.encode;
+
+  const sigScheme = testIsCommunalFn(namespace)
+    ? testSubspaceScheme.signatureScheme
+    : testNamespaceScheme.signatureScheme;
 
   return {
     kind: "delegation",
     parent: parentCap,
     delegationLimit: parentDelegationLimit - 1,
     delegee: delegee,
-    authorisation: testSignatureScheme.sign(
+    authorisation: sigScheme.sign(
       getReceiver(parentCap, testIsCommunalFn),
       concat(
         await testHash(
           encodeCapability(
             {
-              encodeNamespacePublicKey: testEncodeNamespacePublicKey,
-              encodeSubspacePublicKey: testEncodeSubspacePublicKey,
               encodePathLength: testEncodePathLength,
               isCommunalFn: testIsCommunalFn,
               isInclusiveSmallerSubspace: () => false,
               orderSubspace: orderNumber,
               predecessorSubspace: testPredecessorSubspace,
-              encodeNamespaceSignature: testEncodeNamespaceSignature,
-              encodeSubspaceSignature: testEncodeSubspaceSignature,
+              namespaceEncodingScheme: testNamespaceScheme.encodingScheme,
+              subspaceEncodingScheme: testSubspaceScheme.encodingScheme,
             },
             parentCap,
           ),
@@ -992,29 +994,31 @@ export async function randomDelegateCapInvalid(options: {
 
   const namespace = getNamespace(parentCap);
   const pubkeyEncode = testIsCommunalFn(namespace)
-    ? testEncodeNamespacePublicKey
-    : testEncodeSubspacePublicKey;
+    ? testNamespaceScheme.encodingScheme.publicKey.encode
+    : testSubspaceScheme.encodingScheme.publicKey.encode;
+
+  const sigScheme = testIsCommunalFn(namespace)
+    ? testNamespaceScheme.signatureScheme
+    : testSubspaceScheme.signatureScheme;
 
   return {
     kind: "delegation",
     parent: parentCap,
     delegationLimit: parentDelegationLimit + 1,
     delegee: randomId(),
-    authorisation: testSignatureScheme.sign(
+    authorisation: sigScheme.sign(
       getReceiver(parentCap, testIsCommunalFn),
       concat(
         await testHash(
           encodeCapability(
             {
-              encodeNamespacePublicKey: testEncodeNamespacePublicKey,
-              encodeSubspacePublicKey: testEncodeSubspacePublicKey,
               encodePathLength: testEncodePathLength,
               isCommunalFn: testIsCommunalFn,
               isInclusiveSmallerSubspace: () => false,
               orderSubspace: orderNumber,
               predecessorSubspace: testPredecessorSubspace,
-              encodeNamespaceSignature: testEncodeNamespaceSignature,
-              encodeSubspaceSignature: testEncodeSubspaceSignature,
+              namespaceEncodingScheme: testNamespaceScheme.encodingScheme,
+              subspaceEncodingScheme: testSubspaceScheme.encodingScheme,
             },
             parentCap,
           ),
@@ -1092,58 +1096,6 @@ export async function randomCapInvalid(options: {
   return randomMergeCapInvalid(options);
 }
 
-export function testEncodeNamespacePublicKey(namespace: number): Uint8Array {
-  const bytes = new Uint8Array(8);
-  const view = new DataView(bytes.buffer);
-  view.setBigUint64(0, BigInt(namespace));
-
-  return bytes;
-}
-
-export function testEncodeNamespaceSignature(sig: number): Uint8Array {
-  const bytes = new Uint8Array(8);
-  const view = new DataView(bytes.buffer);
-  view.setBigUint64(0, BigInt(sig));
-
-  return bytes;
-}
-
-export function testDecodeNamespacePublicKey(encoded: Uint8Array): number {
-  const view = new DataView(encoded.buffer);
-  return Number(view.getBigUint64(0));
-}
-
-export function testDecodeNamespaceSignature(encoded: Uint8Array): number {
-  const view = new DataView(encoded.buffer);
-  return Number(view.getBigUint64(0));
-}
-
-export function testEncodeSubspacePublicKey(subspace: number): Uint8Array {
-  const bytes = new Uint8Array(2);
-  const view = new DataView(bytes.buffer);
-  view.setUint16(0, subspace);
-
-  return bytes;
-}
-
-export function testEncodeSubspaceSignature(subspace: number): Uint8Array {
-  const bytes = new Uint8Array(2);
-  const view = new DataView(bytes.buffer);
-  view.setUint16(0, subspace);
-
-  return bytes;
-}
-
-export function testDecodeSubspacePublicKey(encoded: Uint8Array): number {
-  const view = new DataView(encoded.buffer);
-  return view.getUint16(0);
-}
-
-export function testDecodeSubspaceSignature(encoded: Uint8Array): number {
-  const view = new DataView(encoded.buffer);
-  return view.getUint16(0);
-}
-
 export function testIsCommunalFn(namespace: number): boolean {
   return namespace < 128;
 }
@@ -1168,29 +1120,117 @@ export function testPredecessorSubspace(num: number) {
   return Math.max(num - 1, 0);
 }
 
-export const testNamespaceScheme: SignatureScheme<
+export const testNamespaceScheme: KeypairScheme<
   number,
   number,
   number,
   number
 > = {
-  generateSeed: () => 0,
-  generateKeys() {
-    const id = randomId();
+  encodingScheme: {
+    publicKey: {
+      encode(key) {
+        const bytes = new Uint8Array(8);
+        const view = new DataView(bytes.buffer);
+        view.setBigUint64(0, BigInt(key));
 
-    return { publicKey: id, secretKey: id };
+        return bytes;
+      },
+      decode(encoded) {
+        const view = new DataView(encoded.buffer);
+        return Number(view.getBigUint64(0));
+      },
+      encodedLength() {
+        return 8;
+      },
+    },
+    signature: {
+      encode(key) {
+        const bytes = new Uint8Array(8);
+        const view = new DataView(bytes.buffer);
+        view.setBigUint64(0, BigInt(key));
+
+        return bytes;
+      },
+      decode(encoded) {
+        const view = new DataView(encoded.buffer);
+        return Number(view.getBigUint64(0));
+      },
+      encodedLength() {
+        return 8;
+      },
+    },
   },
-  sign(secretKey) {
-    return secretKey;
-  },
-  verify(publicKey, signature) {
-    return publicKey === signature;
+  signatureScheme: {
+    generateSeed: () => 0,
+    generateKeys() {
+      const id = randomId();
+
+      return { publicKey: id, secretKey: id };
+    },
+    sign(secretKey) {
+      return secretKey;
+    },
+    verify(publicKey, signature) {
+      return publicKey === signature;
+    },
   },
 };
 
-export const testSubspaceScheme = testNamespaceScheme;
+export const testSubspaceScheme: KeypairScheme<
+  number,
+  number,
+  number,
+  number
+> = {
+  encodingScheme: {
+    publicKey: {
+      encode(key) {
+        const bytes = new Uint8Array(2);
+        const view = new DataView(bytes.buffer);
+        view.setUint16(0, key);
 
-export const testSignatureScheme = testNamespaceScheme;
+        return bytes;
+      },
+      decode(encoded) {
+        const view = new DataView(encoded.buffer);
+        return view.getUint16(0);
+      },
+      encodedLength() {
+        return 2;
+      },
+    },
+    signature: {
+      encode(key) {
+        const bytes = new Uint8Array(2);
+        const view = new DataView(bytes.buffer);
+        view.setUint16(0, key);
+
+        return bytes;
+      },
+      decode(encoded) {
+        const view = new DataView(encoded.buffer);
+        return view.getUint16(0);
+      },
+      encodedLength() {
+        return 2;
+      },
+    },
+  },
+  signatureScheme: {
+    generateSeed: () => 0,
+    generateKeys() {
+      const id = randomId();
+
+      return { publicKey: id, secretKey: id };
+    },
+    sign(secretKey) {
+      return secretKey;
+    },
+    verify(publicKey, signature) {
+      return publicKey === signature;
+    },
+  },
+};
 
 export const TEST_MINIMAL_SUBSPACE_KEY = 0;
 

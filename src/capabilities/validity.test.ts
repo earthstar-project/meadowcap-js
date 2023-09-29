@@ -4,11 +4,7 @@ import {
   randomCap,
   randomCapInvalid,
   TEST_MINIMAL_SUBSPACE_KEY,
-  testEncodeNamespacePublicKey,
-  testEncodeNamespaceSignature,
   testEncodePathLength,
-  testEncodeSubspacePublicKey,
-  testEncodeSubspaceSignature,
   testHash,
   testIsCommunalFn,
   testNamespaceScheme,
@@ -26,10 +22,8 @@ Deno.test("isCapabilityValid (valid)", async () => {
 
     assert(
       await isCapabilityValid({
-        encodeNamespacePublicKey: testEncodeNamespacePublicKey,
-        encodeNamespaceSignature: testEncodeNamespaceSignature,
-        encodeSubspacePublicKey: testEncodeSubspacePublicKey,
-        encodeSubspaceSignature: testEncodeSubspaceSignature,
+        namespaceScheme: testNamespaceScheme,
+        subspaceScheme: testSubspaceScheme,
         encodePathLength: testEncodePathLength,
         isCommunalFn: testIsCommunalFn,
         isInclusiveSmallerSubspace: () => false,
@@ -38,8 +32,6 @@ Deno.test("isCapabilityValid (valid)", async () => {
         orderSubspace: orderNumber,
         predecessorSubspace: testPredecessorSubspace,
         successorSubspace: testSuccessorSubspace,
-        verifySignatureNamespace: testNamespaceScheme.verify,
-        verifySignatureSubspace: testSubspaceScheme.verify,
       }, cap),
     );
   }
@@ -69,10 +61,8 @@ Deno.test("isCapabilityValid (invalid)", async () => {
 
     assert(
       await isCapabilityValid({
-        encodeNamespacePublicKey: testEncodeNamespacePublicKey,
-        encodeNamespaceSignature: testEncodeNamespaceSignature,
-        encodeSubspacePublicKey: testEncodeSubspacePublicKey,
-        encodeSubspaceSignature: testEncodeSubspaceSignature,
+        namespaceScheme: testNamespaceScheme,
+        subspaceScheme: testSubspaceScheme,
         encodePathLength: testEncodePathLength,
         isCommunalFn: testIsCommunalFn,
         isInclusiveSmallerSubspace: () => false,
@@ -81,8 +71,6 @@ Deno.test("isCapabilityValid (invalid)", async () => {
         orderSubspace: orderNumber,
         predecessorSubspace: testPredecessorSubspace,
         successorSubspace: testSuccessorSubspace,
-        verifySignatureNamespace: testNamespaceScheme.verify,
-        verifySignatureSubspace: testSubspaceScheme.verify,
       }, invalidCap) === false,
     );
   }

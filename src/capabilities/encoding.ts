@@ -17,7 +17,11 @@ import {
   predecessorPath,
   predecessorTimestamp,
 } from "../order/predecessors.ts";
-import { IsCommunalFn } from "../meadowcap/types.ts";
+import {
+  EncodingScheme,
+  IsCommunalFn,
+  KeypairEncodingScheme,
+} from "../meadowcap/types.ts";
 import { isCommunalDelegationCap } from "./util.ts";
 
 export function encodeCapability<
@@ -30,10 +34,14 @@ export function encodeCapability<
     isCommunalFn: IsCommunalFn<NamespacePublicKey>;
     orderSubspace: TotalOrder<SubspacePublicKey>;
     encodePathLength: (num: number) => Uint8Array;
-    encodeNamespacePublicKey: (key: NamespacePublicKey) => Uint8Array;
-    encodeNamespaceSignature: (signature: NamespaceSignature) => Uint8Array;
-    encodeSubspacePublicKey: (key: SubspacePublicKey) => Uint8Array;
-    encodeSubspaceSignature: (signature: SubspaceSignature) => Uint8Array;
+    namespaceEncodingScheme: KeypairEncodingScheme<
+      NamespacePublicKey,
+      NamespaceSignature
+    >;
+    subspaceEncodingScheme: KeypairEncodingScheme<
+      SubspacePublicKey,
+      SubspaceSignature
+    >;
     isInclusiveSmallerSubspace: (
       incl: SubspacePublicKey,
       excl: SubspacePublicKey,
@@ -85,7 +93,9 @@ export function encodeCapability<
 
   const namespace = getNamespace(cap);
 
-  const encodedNamespace = config.encodeNamespacePublicKey(namespace);
+  const encodedNamespace = config.namespaceEncodingScheme.publicKey.encode(
+    namespace,
+  );
 
   // switch on cap type...
 
@@ -94,7 +104,9 @@ export function encodeCapability<
   switch (cap.kind) {
     case "source": {
       if (config.isCommunalFn(namespace)) {
-        encodedCapability = config.encodeSubspacePublicKey(cap.subspaceId);
+        encodedCapability = config.subspaceEncodingScheme.publicKey.encode(
+          cap.subspaceId,
+        );
       }
       break;
     }
@@ -102,12 +114,12 @@ export function encodeCapability<
       const isCommunal = isCommunalDelegationCap(cap, config.isCommunalFn);
 
       const encDelegee = isCommunal
-        ? config.encodeSubspacePublicKey(cap.delegee)
-        : config.encodeNamespacePublicKey(cap.delegee);
+        ? config.subspaceEncodingScheme.publicKey.encode(cap.delegee)
+        : config.namespaceEncodingScheme.publicKey.encode(cap.delegee);
 
       const encAuthorisation = isCommunal
-        ? config.encodeSubspaceSignature(cap.authorisation)
-        : config.encodeNamespaceSignature(cap.authorisation);
+        ? config.subspaceEncodingScheme.signature.encode(cap.authorisation)
+        : config.namespaceEncodingScheme.signature.encode(cap.authorisation);
 
       encodedCapability = concat(
         encodeCapability(config, cap.parent),
@@ -125,7 +137,11 @@ export function encodeCapability<
 
       encodedCapability = concat(
         encodeCapability(config, cap.parent),
-        encodeProduct(config, restrictionProduct),
+        encodeProduct({
+          ...config,
+          encodeSubspacePublicKey:
+            config.subspaceEncodingScheme.publicKey.encode,
+        }, restrictionProduct),
       );
       break;
     }
@@ -188,15 +204,15 @@ export function decodeCapability<
     ) => boolean;
     pathBitIntLength: number;
     maxPathLength: number;
+    namespaceEncodingScheme: KeypairEncodingScheme<
+      NamespacePublicKey,
+      NamespaceSignature
+    >;
+    subspaceEncodingScheme: KeypairEncodingScheme<
+      SubspacePublicKey,
+      SubspaceSignature
+    >;
     decodePathLength: (encoding: Uint8Array) => number;
-    decodeNamespacePubKey: (encoding: Uint8Array) => NamespacePublicKey;
-    decodeNamespaceSignature: (encoding: Uint8Array) => NamespaceSignature;
-    decodeSubspacePubKey: (encoding: Uint8Array) => SubspacePublicKey;
-    decodeSubspaceSignature: (encoding: Uint8Array) => SubspaceSignature;
-    namespacePubKeyLength: number;
-    subspacePubKeyLength: number;
-    namespaceSignatureLength: number;
-    subspaceSignatureLength: number;
   },
   encodedCapability: Uint8Array,
 ): {
@@ -212,31 +228,37 @@ export function decodeCapability<
 
   const accessMode = (encodedCapability[0] & 0x80) === 0x80 ? "write" : "read";
 
-  const namespaceId = config.decodeNamespacePubKey(
-    encodedCapability.slice(1, 1 + config.namespacePubKeyLength),
+  const namespaceId = config.namespaceEncodingScheme.publicKey.decode(
+    encodedCapability.slice(1),
   );
+
+  const encodedNamespaceIdLength = config.namespaceEncodingScheme.publicKey
+    .encodedLength(namespaceId);
 
   const isSource = (encodedCapability[0] & 0x7f) === 0x7f;
 
   if (isSource) {
     const isCommunualNamespace = config.isCommunalFn(namespaceId);
 
+    const subspaceId = isCommunualNamespace
+      ? config.subspaceEncodingScheme.publicKey.decode(
+        encodedCapability.slice(
+          1 + encodedNamespaceIdLength,
+        ),
+      )
+      : config.minimalSubspaceKey;
+
     return {
       capability: {
         kind: "source",
         accessMode,
         namespaceId,
-        subspaceId: isCommunualNamespace
-          ? config.decodeSubspacePubKey(
-            encodedCapability.slice(
-              1 + config.namespacePubKeyLength,
-              1 + config.namespacePubKeyLength + config.subspacePubKeyLength,
-            ),
-          )
-          : config.minimalSubspaceKey,
+        subspaceId,
       },
-      length: 1 + config.namespacePubKeyLength +
-        (isCommunualNamespace ? config.subspacePubKeyLength : 0),
+      length: 1 + encodedNamespaceIdLength +
+        (isCommunualNamespace
+          ? config.subspaceEncodingScheme.publicKey.encodedLength(subspaceId)
+          : 0),
     };
   }
 
@@ -248,35 +270,24 @@ export function decodeCapability<
       NamespaceSignature,
       SubspacePublicKey,
       SubspaceSignature
-    >(config, encodedCapability.slice(1 + config.namespacePubKeyLength));
+    >(config, encodedCapability.slice(1 + encodedNamespaceIdLength));
 
     const delegationLimit =
-      encodedCapability[1 + config.namespacePubKeyLength + parentLength];
+      encodedCapability[1 + encodedNamespaceIdLength + parentLength];
 
     const isCommunalNamespace = config.isCommunalFn(namespaceId);
 
-    const delegeeLength = isCommunalNamespace
-      ? config.subspacePubKeyLength
-      : config.namespacePubKeyLength;
-
-    const authorisationLength = isCommunalNamespace
-      ? config.subspacePubKeyLength
-      : config.namespacePubKeyLength;
-
-    const { delegee, authorisation } = decodeDelegeeAuthorisation(
-      {
-        isCommunal: isCommunalNamespace,
-        decodeNamespacePubKey: config.decodeNamespacePubKey,
-        decodeNamespaceSignature: config.decodeNamespaceSignature,
-        decodeSubspacePubKey: config.decodeSubspacePubKey,
-        decodeSubspaceSignature: config.decodeSubspaceSignature,
-        namespacePubkeyLength: config.namespacePubKeyLength,
-        subspacePubkeyLength: config.subspacePubKeyLength,
-      },
-      encodedCapability.slice(
-        1 + config.namespacePubKeyLength + parentLength + 1,
-      ),
-    );
+    const { delegee, delegeeLength, authorisation, authorisationLength } =
+      decodeDelegeeAuthorisation(
+        {
+          isCommunal: isCommunalNamespace,
+          namespaceEncodingScheme: config.namespaceEncodingScheme,
+          subspaceEncodingScheme: config.subspaceEncodingScheme,
+        },
+        encodedCapability.slice(
+          1 + encodedNamespaceIdLength + parentLength + 1,
+        ),
+      );
 
     return {
       capability: {
@@ -291,7 +302,7 @@ export function decodeCapability<
         SubspacePublicKey,
         SubspaceSignature
       >,
-      length: 1 + config.namespacePubKeyLength + parentLength + 1 +
+      length: 1 + encodedNamespaceIdLength + parentLength + 1 +
         delegeeLength +
         authorisationLength,
     };
@@ -305,13 +316,17 @@ export function decodeCapability<
       NamespaceSignature,
       SubspacePublicKey,
       SubspaceSignature
-    >(config, encodedCapability.slice(1 + config.namespacePubKeyLength));
+    >(config, encodedCapability.slice(1 + encodedNamespaceIdLength));
 
     const { product: restrictionProduct, length: productLength } =
       decodeProduct(
-        config,
+        {
+          ...config,
+          subspacePublicKeyEncodingScheme:
+            config.subspaceEncodingScheme.publicKey,
+        },
         encodedCapability.slice(
-          1 + config.namespacePubKeyLength + parentLength,
+          1 + encodedNamespaceIdLength + parentLength,
         ),
       );
 
@@ -324,7 +339,7 @@ export function decodeCapability<
           successorSubspace: config.successorSubspace,
         }, restrictionProduct),
       },
-      length: 1 + config.namespacePubKeyLength + parentLength + productLength,
+      length: 1 + encodedNamespaceIdLength + parentLength + productLength,
     };
   }
 
@@ -346,23 +361,23 @@ export function decodeCapability<
   } else if (componentCountIndicator === 121) {
     const view = new DataView(encodedCapability.buffer);
 
-    componentCount = view.getUint8(1 + config.namespacePubKeyLength);
+    componentCount = view.getUint8(1 + encodedNamespaceIdLength);
     componentCountIndicatorLen = 1;
   } else if (componentCountIndicator === 122) {
     const view = new DataView(encodedCapability.buffer);
 
-    componentCount = view.getUint16(1 + config.namespacePubKeyLength);
+    componentCount = view.getUint16(1 + encodedNamespaceIdLength);
     componentCountIndicatorLen = 2;
   } else if (componentCountIndicator === 123) {
     const view = new DataView(encodedCapability.buffer);
 
-    componentCount = view.getUint32(1 + config.namespacePubKeyLength);
+    componentCount = view.getUint32(1 + encodedNamespaceIdLength);
     componentCountIndicatorLen = 4;
   } else if (componentCountIndicator === 124) {
     const view = new DataView(encodedCapability.buffer);
 
     componentCount = Number(
-      view.getBigUint64(1 + config.namespacePubKeyLength),
+      view.getBigUint64(1 + encodedNamespaceIdLength),
     );
     componentCountIndicatorLen = 8;
   }
@@ -375,7 +390,7 @@ export function decodeCapability<
     mergedComponents.length < componentCount
   ) {
     const toDecode = encodedCapability.slice(
-      1 + config.namespacePubKeyLength +
+      1 + encodedNamespaceIdLength +
         componentCountIndicatorLen + decodedBytesSoFar,
     );
 
@@ -396,7 +411,7 @@ export function decodeCapability<
       kind: "merge",
       components: mergedComponents,
     },
-    length: 1 + config.namespacePubKeyLength +
+    length: 1 + encodedNamespaceIdLength +
       componentCountIndicatorLen + decodedBytesSoFar,
   };
 }
@@ -409,45 +424,61 @@ export function decodeDelegeeAuthorisation<
 >(
   options: {
     isCommunal: boolean;
-    decodeNamespacePubKey: (encoding: Uint8Array) => NamespacePublicKey;
-    decodeNamespaceSignature: (encoding: Uint8Array) => NamespaceSignature;
-    decodeSubspacePubKey: (encoding: Uint8Array) => SubspacePublicKey;
-    decodeSubspaceSignature: (encoding: Uint8Array) => SubspaceSignature;
-    namespacePubkeyLength: number;
-    subspacePubkeyLength: number;
+    namespaceEncodingScheme: KeypairEncodingScheme<
+      NamespacePublicKey,
+      NamespaceSignature
+    >;
+    subspaceEncodingScheme: KeypairEncodingScheme<
+      SubspacePublicKey,
+      SubspaceSignature
+    >;
   },
   encoded: Uint8Array,
 ):
   | {
     delegee: NamespacePublicKey;
+    delegeeLength: number;
     authorisation: NamespaceSignature;
+    authorisationLength: number;
   }
   | {
     delegee: SubspacePublicKey;
+    delegeeLength: number;
     authorisation: SubspaceSignature;
+    authorisationLength: number;
   } {
   if (options.isCommunal) {
-    const delegee = options.decodeSubspacePubKey(encoded);
+    const delegee = options.subspaceEncodingScheme.publicKey.decode(encoded);
+    const delegeeLength = options.subspaceEncodingScheme.publicKey
+      .encodedLength(delegee);
 
-    const authorisation = options.decodeSubspaceSignature(
-      encoded.slice(options.subspacePubkeyLength),
+    const authorisation = options.subspaceEncodingScheme.signature.decode(
+      encoded.slice(delegeeLength),
     );
 
     return {
       delegee,
+      delegeeLength,
       authorisation,
+      authorisationLength: options.subspaceEncodingScheme.signature
+        .encodedLength(authorisation),
     };
   }
 
-  const delegee = options.decodeNamespacePubKey(encoded);
+  const delegee = options.namespaceEncodingScheme.publicKey.decode(encoded);
+  const delegeeLength = options.namespaceEncodingScheme.publicKey
+    .encodedLength(delegee);
 
-  const authorisation = options.decodeNamespaceSignature(
-    encoded.slice(options.namespacePubkeyLength),
+  const authorisation = options.namespaceEncodingScheme.signature.decode(
+    encoded.slice(delegeeLength),
   );
 
   return {
     delegee,
+    delegeeLength,
     authorisation,
+    authorisationLength: options.namespaceEncodingScheme.signature
+      .encodedLength(authorisation),
   };
 }
 
@@ -715,8 +746,7 @@ export function decodeProduct<
   SubspaceIdType,
 >(
   {
-    subspacePubKeyLength,
-    decodeSubspacePubKey,
+    subspacePublicKeyEncodingScheme,
     orderSubspace,
     predecessorSubspace,
     successorSubspace,
@@ -725,8 +755,7 @@ export function decodeProduct<
     maxPathLength,
     decodePathLength,
   }: {
-    subspacePubKeyLength: number;
-    decodeSubspacePubKey: (encodedSubspace: Uint8Array) => SubspaceIdType;
+    subspacePublicKeyEncodingScheme: EncodingScheme<SubspaceIdType>;
     orderSubspace: TotalOrder<SubspaceIdType>;
     predecessorSubspace: PredecessorFn<SubspaceIdType>;
     successorSubspace: SuccessorFn<SubspaceIdType>;
@@ -791,7 +820,7 @@ export function decodeProduct<
     timeLength = Number(encodedProductView.getBigUint64(timeLengthPos));
   }
 
-  const subspaceRangesPos = timeLengthPos + (lte256TimeRanges ? 1 : 8);
+  let subspaceRangesPos = timeLengthPos + (lte256TimeRanges ? 1 : 8);
 
   // Decode subspace chunks
 
@@ -801,19 +830,12 @@ export function decodeProduct<
       : subspaceLength / 8,
   );
 
-  const subspaceChunkByteLength = 1 + (16 * subspacePubKeyLength);
-
   let subspaceDisjoint: DisjointInterval<SubspaceIdType> = [];
 
-  let pathChunksPos = subspaceRangesPos;
-
   for (let chunkIdx = 0; chunkIdx < subspaceChunkCount; chunkIdx++) {
-    const chunkStartPos = subspaceRangesPos +
-      (chunkIdx * subspaceChunkByteLength);
+    const rangeKindFlagByte = encodedProduct[subspaceRangesPos];
 
-    const rangeKindFlagByte = encodedProduct[chunkStartPos];
-
-    pathChunksPos += 1;
+    subspaceRangesPos += 1;
 
     for (let rangeIdx = 0; rangeIdx < 8; rangeIdx++) {
       const absoluteRangeIdx = rangeIdx + (chunkIdx * 8);
@@ -825,21 +847,28 @@ export function decodeProduct<
           absoluteRangeIdx <= subspaceLength - 1)
       ) {
         // This is a closed range.
-        const startPos = chunkStartPos + 1 +
-          (rangeIdx * subspacePubKeyLength * 2);
-        const endPos = startPos + subspacePubKeyLength;
 
         const isInclusive = (rangeKindFlagByte & 1 << rangeIdx) !== 0;
 
         // Read subspace from start pos.
-        const subspaceStart = decodeSubspacePubKey(
-          encodedProduct.slice(startPos, startPos + subspacePubKeyLength),
+        const subspaceStart = subspacePublicKeyEncodingScheme.decode(
+          encodedProduct.slice(subspaceRangesPos),
         );
 
+        // Get the encoded length of the decoded subspace.
+        const encodedStartLength = subspacePublicKeyEncodingScheme
+          .encodedLength(subspaceStart);
+        subspaceRangesPos += encodedStartLength;
+
         // Read subspace from end pos.
-        const subspaceEnd = decodeSubspacePubKey(
-          encodedProduct.slice(endPos, endPos + subspacePubKeyLength),
+        const subspaceEnd = subspacePublicKeyEncodingScheme.decode(
+          encodedProduct.slice(subspaceRangesPos),
         );
+
+        const encodedEndLength = subspacePublicKeyEncodingScheme.encodedLength(
+          subspaceEnd,
+        );
+        subspaceRangesPos += encodedEndLength;
 
         const range: Range<SubspaceIdType> = {
           kind: isInclusive ? "closed_inclusive" : "closed_exclusive",
@@ -857,20 +886,21 @@ export function decodeProduct<
           range,
           subspaceDisjoint,
         );
-
-        pathChunksPos += subspacePubKeyLength * 2;
       } else if (
         hasOpenSubspaceRange &&
         absoluteRangeIdx === subspaceLength - 1
       ) {
         // This is the open range!
-        const startPos = chunkStartPos + 1 +
-          (rangeIdx * subspacePubKeyLength * 2);
 
         // Read subspace from start pos.
-        const subspaceStart = decodeSubspacePubKey(
-          encodedProduct.slice(startPos, startPos + subspacePubKeyLength),
+        const subspaceStart = subspacePublicKeyEncodingScheme.decode(
+          encodedProduct.slice(subspaceRangesPos),
         );
+
+        // Get the encoded length of the decoded subspace.
+        const encodedStartLength = subspacePublicKeyEncodingScheme
+          .encodedLength(subspaceStart);
+        subspaceRangesPos += encodedStartLength;
 
         subspaceDisjoint = addRangeToDisjointInterval(
           {
@@ -885,8 +915,6 @@ export function decodeProduct<
           },
           subspaceDisjoint,
         );
-
-        pathChunksPos += subspacePubKeyLength;
       } else {
         // This is a nothing range.
         break;
@@ -902,7 +930,7 @@ export function decodeProduct<
       : pathLength / 8,
   );
 
-  let currentPathChunkPos = pathChunksPos;
+  let currentPathChunkPos = subspaceRangesPos;
 
   let pathDisjoint: DisjointInterval<Uint8Array> = [];
 

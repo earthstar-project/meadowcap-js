@@ -6,14 +6,16 @@ import {
   predecessorNumber,
   randomCap,
   successorNumber,
-  testDecodeAuthorSignature,
+  testDecodeNamespacePublicKey,
+  testDecodeNamespaceSignature,
   testDecodePathLength,
-  testDecodeSubspace,
-  testEncodeAuthor,
-  testEncodeAuthorSignature,
-  testEncodeNamespace,
+  testDecodeSubspacePublicKey,
+  testDecodeSubspaceSignature,
+  testEncodeNamespacePublicKey,
+  testEncodeNamespaceSignature,
   testEncodePathLength,
-  testEncodeSubspace,
+  testEncodeSubspacePublicKey,
+  testEncodeSubspaceSignature,
   testIsCommunalFn,
 } from "../test/util.ts";
 import {
@@ -28,7 +30,7 @@ Deno.test("empty product encoding", () => {
 
   const actual = encodeProduct({
     orderSubspace: orderNumber,
-    encodeSubspace: testEncodeSubspace,
+    encodeSubspacePublicKey: testEncodeSubspacePublicKey,
     encodePathLength: testEncodePathLength,
   }, [[], [], []]);
 
@@ -48,13 +50,13 @@ Deno.test("non-empty product encoding (roundtrip)", () => {
 
     const encoded = encodeProduct({
       orderSubspace: orderNumber,
-      encodeSubspace: testEncodeSubspace,
+      encodeSubspacePublicKey: testEncodeSubspacePublicKey,
       encodePathLength: testEncodePathLength,
     }, canonic);
 
-    const decoded = decodeProduct({
-      decodeSubspace: testDecodeSubspace,
-      encodedSubspaceLength: 8,
+    const decoded = decodeProduct<number>({
+      decodeSubspacePubKey: testDecodeSubspacePublicKey,
+      subspacePubKeyLength: 2,
       isInclusiveSmallerSubspace: () => false,
       orderSubspace: orderNumber,
       decodePathLength: testDecodePathLength,
@@ -79,30 +81,31 @@ Deno.test("capability encoding", async () => {
 
     // Encode it.
     const encoded = encodeCapability({
-      encodeNamespace: testEncodeNamespace,
+      encodeNamespacePublicKey: testEncodeNamespacePublicKey,
       encodePathLength: testEncodePathLength,
-      encodeSubspace: testEncodeSubspace,
+      encodeSubspacePublicKey: testEncodeSubspacePublicKey,
       isCommunalFn: testIsCommunalFn,
       orderSubspace: orderNumber,
-      encodeAuthorPublicKey: testEncodeAuthor,
-      encodeAuthorSignature: testEncodeAuthorSignature,
+      encodeNamespaceSignature: testEncodeNamespaceSignature,
+      encodeSubspaceSignature: testEncodeSubspaceSignature,
       isInclusiveSmallerSubspace: () => false,
       predecessorSubspace: predecessorNumber,
     }, cap);
 
     // Decode it.
     const { capability: decoded, length } = decodeCapability({
-      decodeNamespace: testDecodeSubspace,
-      decodeSubspace: testDecodeSubspace,
+      decodeNamespacePubKey: testDecodeNamespacePublicKey,
+      decodeSubspacePubKey: testDecodeSubspacePublicKey,
       isCommunalFn: testIsCommunalFn,
       minimalSubspaceKey: 0,
-      namespaceKeyLength: 8,
-      authorPubkeyLength: 8,
-      authorSigLength: 49,
-      decodeAuthorPubKey: testDecodeSubspace,
-      decodeAuthorSignature: testDecodeAuthorSignature,
+
+      decodeNamespaceSignature: testDecodeNamespaceSignature,
+      decodeSubspaceSignature: testDecodeSubspaceSignature,
+      namespacePubKeyLength: 8,
+      namespaceSignatureLength: 8,
+      subspacePubKeyLength: 2,
+      subspaceSignatureLength: 2,
       decodePathLength: testDecodePathLength,
-      encodedSubspaceLength: 8,
       isInclusiveSmallerSubspace: () => false,
       maxPathLength: 4,
       orderSubspace: orderNumber,

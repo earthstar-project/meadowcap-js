@@ -4,9 +4,9 @@ export type AccessMode = "read" | "write";
 
 export type Capability<
   NamespacePublicKey,
+  NamespaceSignature,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSignature,
 > =
   | SourceCap<
     NamespacePublicKey,
@@ -14,21 +14,31 @@ export type Capability<
   >
   | DelegationCap<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature,
+    NamespacePublicKey,
+    NamespaceSignature
+  >
+  | DelegationCap<
+    NamespacePublicKey,
+    NamespaceSignature,
+    SubspacePublicKey,
+    SubspaceSignature,
+    SubspacePublicKey,
+    SubspaceSignature
   >
   | RestrictionCap<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature
   >
   | MergeCap<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature
   >;
 
 export type SourceCap<NamespacePublicKey, SubspacePublicKey> = {
@@ -40,16 +50,18 @@ export type SourceCap<NamespacePublicKey, SubspacePublicKey> = {
 
 export type DelegationCap<
   NamespacePublicKey,
+  NamespaceSignature,
   SubspacePublicKey,
+  SubspaceSignature,
   AuthorPublicKey,
   AuthorSignature,
 > = {
   kind: "delegation";
   parent: Capability<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature
   >;
   delegee: AuthorPublicKey;
   authorisation: AuthorSignature;
@@ -58,46 +70,31 @@ export type DelegationCap<
 
 export type RestrictionCap<
   NamespacePublicKey,
+  NamespaceSignature,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSignature,
 > = {
   kind: "restriction";
   parent: Capability<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature
   >;
   product: ThreeDimensionalProduct<SubspacePublicKey>;
 };
 
 export type MergeCap<
   NamespacePublicKey,
+  NamespaceSignature,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSignature,
 > = {
   kind: "merge";
   components: Capability<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature
   >[];
 };
-
-export type IsCommunalFn<NamespacePublicKey> = (
-  pubkey: NamespacePublicKey,
-) => boolean;
-
-export type VerifyFn<
-  NamespacePublicKey,
-  SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
-> = (
-  pubKey: NamespacePublicKey | SubspacePublicKey | AuthorPublicKey,
-  signature: AuthorSignature,
-  bytestring: Uint8Array,
-) => boolean;

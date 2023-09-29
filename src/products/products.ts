@@ -1,11 +1,16 @@
 import {
   intersectIntervals,
+  intervalIncludesValue,
   isEqualInterval,
   isValid3dInterval,
   isValidInterval,
   orderIntervalPair,
 } from "../intervals/intervals.ts";
-import { Interval, ThreeDimensionalInterval } from "../intervals/types.ts";
+import {
+  Interval,
+  Sparse3dInterval,
+  ThreeDimensionalInterval,
+} from "../intervals/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import {
   predecessorPath,
@@ -271,6 +276,20 @@ export function hasOpenRange<ValueType>(
   return false;
 }
 
+export function disjointIntervalIncludesValue<ValueType>(
+  { order }: { order: TotalOrder<ValueType> },
+  disjointInterval: DisjointInterval<ValueType>,
+  value: ValueType,
+) {
+  for (const interval of disjointInterval) {
+    if (intervalIncludesValue({ order }, interval, value)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Three dimensional products
 
 export function addTo3dProduct<SubspaceIdType>(
@@ -281,42 +300,44 @@ export function addTo3dProduct<SubspaceIdType>(
     orderSubspace: TotalOrder<SubspaceIdType>;
     shouldThrow?: boolean;
   },
-  interval3d: ThreeDimensionalInterval<SubspaceIdType>,
+  interval3d: Sparse3dInterval<SubspaceIdType>,
   product: ThreeDimensionalProduct<SubspaceIdType>,
 ): ThreeDimensionalProduct<SubspaceIdType> {
-  if (isValid3dInterval(orderSubspace, interval3d) === false) {
-    throw new Error("Badly formed 3D interval");
-  }
-
-  const [subspaceRange, pathRange, timestampRange] = interval3d;
+  const [subspaceInterval, pathInterval, timestampInterval] = interval3d;
   const [subspaceDisjoint, pathDisjoint, timestampDisjoint] = product;
 
-  const nextSubspaceDisjoint = addToDisjointInterval(
-    {
-      order: orderSubspace,
-      shouldThrow,
-    },
-    subspaceRange,
-    subspaceDisjoint,
-  );
+  const nextSubspaceDisjoint = subspaceInterval
+    ? addToDisjointInterval(
+      {
+        order: orderSubspace,
+        shouldThrow,
+      },
+      subspaceInterval,
+      subspaceDisjoint,
+    )
+    : subspaceDisjoint;
 
-  const nextPathDisjoint = addToDisjointInterval(
-    {
-      order: orderPaths,
-      shouldThrow,
-    },
-    pathRange,
-    pathDisjoint,
-  );
+  const nextPathDisjoint = pathInterval
+    ? addToDisjointInterval(
+      {
+        order: orderPaths,
+        shouldThrow,
+      },
+      pathInterval,
+      pathDisjoint,
+    )
+    : pathDisjoint;
 
-  const nextTimestampDisjoint = addToDisjointInterval(
-    {
-      order: orderTimestamps,
-      shouldThrow,
-    },
-    timestampRange,
-    timestampDisjoint,
-  );
+  const nextTimestampDisjoint = timestampInterval
+    ? addToDisjointInterval(
+      {
+        order: orderTimestamps,
+        shouldThrow,
+      },
+      timestampInterval,
+      timestampDisjoint,
+    )
+    : timestampDisjoint;
 
   return [
     nextSubspaceDisjoint,

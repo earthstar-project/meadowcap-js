@@ -4,16 +4,17 @@ import {
   randomCap,
   randomCapInvalid,
   TEST_MINIMAL_SUBSPACE_KEY,
-  testEncodeAuthor,
-  testEncodeAuthorSignature,
-  testEncodeNamespace,
+  testEncodeNamespacePublicKey,
+  testEncodeNamespaceSignature,
   testEncodePathLength,
-  testEncodeSubspace,
+  testEncodeSubspacePublicKey,
+  testEncodeSubspaceSignature,
   testHash,
   testIsCommunalFn,
+  testNamespaceScheme,
   testPredecessorSubspace,
+  testSubspaceScheme,
   testSuccessorSubspace,
-  testVerify,
 } from "../test/util.ts";
 import { isCapabilityValid } from "./validity.ts";
 
@@ -25,19 +26,20 @@ Deno.test("isCapabilityValid (valid)", async () => {
 
     assert(
       await isCapabilityValid({
-        encodeAuthorPublicKey: testEncodeAuthor,
-        encodeNamespace: testEncodeNamespace,
-        encodeSubspace: testEncodeSubspace,
+        encodeNamespacePublicKey: testEncodeNamespacePublicKey,
+        encodeNamespaceSignature: testEncodeNamespaceSignature,
+        encodeSubspacePublicKey: testEncodeSubspacePublicKey,
+        encodeSubspaceSignature: testEncodeSubspaceSignature,
         encodePathLength: testEncodePathLength,
-        isCommunal: testIsCommunalFn,
+        isCommunalFn: testIsCommunalFn,
         isInclusiveSmallerSubspace: () => false,
-        hashEncodedCapability: testHash,
+        hashCapability: testHash,
         minimalSubspaceKey: TEST_MINIMAL_SUBSPACE_KEY,
         orderSubspace: orderNumber,
         predecessorSubspace: testPredecessorSubspace,
         successorSubspace: testSuccessorSubspace,
-        verify: testVerify,
-        encodeAuthorSignature: testEncodeAuthorSignature,
+        verifySignatureNamespace: testNamespaceScheme.verify,
+        verifySignatureSubspace: testSubspaceScheme.verify,
       }, cap),
     );
   }
@@ -67,19 +69,20 @@ Deno.test("isCapabilityValid (invalid)", async () => {
 
     assert(
       await isCapabilityValid({
-        encodeAuthorPublicKey: testEncodeAuthor,
-        encodeNamespace: testEncodeNamespace,
-        encodeSubspace: testEncodeSubspace,
+        encodeNamespacePublicKey: testEncodeNamespacePublicKey,
+        encodeNamespaceSignature: testEncodeNamespaceSignature,
+        encodeSubspacePublicKey: testEncodeSubspacePublicKey,
+        encodeSubspaceSignature: testEncodeSubspaceSignature,
         encodePathLength: testEncodePathLength,
-        isCommunal: testIsCommunalFn,
+        isCommunalFn: testIsCommunalFn,
         isInclusiveSmallerSubspace: () => false,
-        hashEncodedCapability: testHash,
+        hashCapability: testHash,
         minimalSubspaceKey: TEST_MINIMAL_SUBSPACE_KEY,
         orderSubspace: orderNumber,
         predecessorSubspace: testPredecessorSubspace,
         successorSubspace: testSuccessorSubspace,
-        verify: testVerify,
-        encodeAuthorSignature: testEncodeAuthorSignature,
+        verifySignatureNamespace: testNamespaceScheme.verify,
+        verifySignatureSubspace: testSubspaceScheme.verify,
       }, invalidCap) === false,
     );
   }

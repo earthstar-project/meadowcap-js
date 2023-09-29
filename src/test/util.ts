@@ -1,22 +1,21 @@
 import { concat } from "$std/bytes/concat.ts";
-import { equals as equalsBytes } from "$std/bytes/equals.ts";
 import { encodeCapability } from "../capabilities/encoding.ts";
 import {
-  getAccessMode,
   getDelegationLimit,
   getGrantedProduct,
+  getNamespace,
   getReceiver,
 } from "../capabilities/semantics.ts";
 import {
   AccessMode,
   Capability,
   DelegationCap,
-  IsCommunalFn,
   MergeCap,
   RestrictionCap,
   SourceCap,
 } from "../capabilities/types.ts";
 import { Interval, ThreeDimensionalInterval } from "../intervals/types.ts";
+import { SignatureScheme } from "../meadowcap/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import {
   predecessorPath,
@@ -714,10 +713,10 @@ export function randomSourceCap(
 
 export async function randomDelegateCap(options: {
   delegee?: number;
-  parentCap?: Capability<number, number, number, Uint8Array>;
+  parentCap?: Capability<number, number, number, number>;
   noMerge?: boolean;
   depthMaxDepth: [number, number];
-}): Promise<DelegationCap<number, number, number, Uint8Array>> {
+}): Promise<DelegationCap<number, number, number, number, number, number>> {
   const parentCap = options.parentCap ? options.parentCap : await randomCap({
     ...options,
     depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
@@ -727,39 +726,44 @@ export async function randomDelegateCap(options: {
 
   const parentDelegationLimit = getDelegationLimit(parentCap);
 
+  const namespace = getNamespace(parentCap);
+  const pubkeyEncode = testIsCommunalFn(namespace)
+    ? testEncodeSubspacePublicKey
+    : testEncodeNamespacePublicKey;
+
   return {
     kind: "delegation",
     parent: parentCap,
     delegationLimit: parentDelegationLimit - 1,
     delegee: delegee,
-    authorisation: testSign(
-      testEncodeAuthor(getReceiver(parentCap, testIsCommunalFn)),
+    authorisation: testSignatureScheme.sign(
+      getReceiver(parentCap, testIsCommunalFn),
       concat(
         await testHash(
           encodeCapability(
             {
-              encodeAuthorPublicKey: testEncodeAuthor,
-              encodeNamespace: testEncodeNamespace,
-              encodeSubspace: testEncodeSubspace,
+              encodeNamespacePublicKey: testEncodeNamespacePublicKey,
+              encodeSubspacePublicKey: testEncodeSubspacePublicKey,
               encodePathLength: testEncodePathLength,
               isCommunalFn: testIsCommunalFn,
               isInclusiveSmallerSubspace: () => false,
               orderSubspace: orderNumber,
               predecessorSubspace: testPredecessorSubspace,
-              encodeAuthorSignature: testEncodeAuthorSignature,
+              encodeNamespaceSignature: testEncodeNamespaceSignature,
+              encodeSubspaceSignature: testEncodeSubspaceSignature,
             },
             parentCap,
           ),
         ),
         new Uint8Array([parentDelegationLimit - 1]),
-        testEncodeAuthor(delegee),
+        pubkeyEncode(delegee),
       ),
     ),
   };
 }
 
 export async function randomRestrictionCap(options: {
-  parentCap?: Capability<number, number, number, Uint8Array>;
+  parentCap?: Capability<number, number, number, number>;
   noMerge?: boolean;
   depthMaxDepth: [number, number];
 }): Promise<
@@ -792,8 +796,8 @@ export async function randomMergeCap(options: {
   namespaceId?: number;
   subspaceId?: number;
   depthMaxDepth: [number, number];
-}): Promise<MergeCap<number, number, number, Uint8Array>> {
-  const components: Capability<number, number, number, Uint8Array>[] = [];
+}): Promise<MergeCap<number, number, number, number>> {
+  const components: Capability<number, number, number, number>[] = [];
 
   const mode = options.mode || randomAccessMode();
   const namespaceId = options.namespaceId || randomId();
@@ -937,9 +941,9 @@ export async function randomCap(options: {
   subspaceId?: number;
   noMerge?: boolean;
   delegee?: number;
-  parentCap?: Capability<number, number, number, Uint8Array>;
+  parentCap?: Capability<number, number, number, number>;
   depthMaxDepth: [number, number];
-}): Promise<Capability<number, number, number, Uint8Array>> {
+}): Promise<Capability<number, number, number, number>> {
   if (options.depthMaxDepth[0] >= options.depthMaxDepth[1]) {
     return randomSourceCap(options);
   }
@@ -978,7 +982,7 @@ export function randomSourceCapInvalid(): SourceCap<number, number> {
 
 export async function randomDelegateCapInvalid(options: {
   depthMaxDepth: [number, number];
-}): Promise<DelegationCap<number, number, number, Uint8Array>> {
+}): Promise<DelegationCap<number, number, number, number, number, number>> {
   const parentCap = await randomCapInvalid({
     ...options,
     depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
@@ -986,32 +990,37 @@ export async function randomDelegateCapInvalid(options: {
 
   const parentDelegationLimit = getDelegationLimit(parentCap);
 
+  const namespace = getNamespace(parentCap);
+  const pubkeyEncode = testIsCommunalFn(namespace)
+    ? testEncodeNamespacePublicKey
+    : testEncodeSubspacePublicKey;
+
   return {
     kind: "delegation",
     parent: parentCap,
     delegationLimit: parentDelegationLimit + 1,
     delegee: randomId(),
-    authorisation: testSign(
-      testEncodeAuthor(getReceiver(parentCap, testIsCommunalFn)),
+    authorisation: testSignatureScheme.sign(
+      getReceiver(parentCap, testIsCommunalFn),
       concat(
         await testHash(
           encodeCapability(
             {
-              encodeAuthorPublicKey: testEncodeAuthor,
-              encodeNamespace: testEncodeNamespace,
-              encodeSubspace: testEncodeSubspace,
+              encodeNamespacePublicKey: testEncodeNamespacePublicKey,
+              encodeSubspacePublicKey: testEncodeSubspacePublicKey,
               encodePathLength: testEncodePathLength,
               isCommunalFn: testIsCommunalFn,
               isInclusiveSmallerSubspace: () => false,
               orderSubspace: orderNumber,
               predecessorSubspace: testPredecessorSubspace,
-              encodeAuthorSignature: testEncodeAuthorSignature,
+              encodeNamespaceSignature: testEncodeNamespaceSignature,
+              encodeSubspaceSignature: testEncodeSubspaceSignature,
             },
             parentCap,
           ),
         ),
         new Uint8Array([parentDelegationLimit - 2]),
-        testEncodeAuthor(randomId()),
+        pubkeyEncode(randomId()),
       ),
     ),
   };
@@ -1065,7 +1074,7 @@ export async function randomMergeCapInvalid(options: {
 
 export async function randomCapInvalid(options: {
   depthMaxDepth: [number, number];
-}): Promise<Capability<number, number, number, Uint8Array>> {
+}): Promise<Capability<number, number, number, number>> {
   if (options.depthMaxDepth[0] >= options.depthMaxDepth[1]) {
     return randomSourceCapInvalid();
   }
@@ -1083,7 +1092,7 @@ export async function randomCapInvalid(options: {
   return randomMergeCapInvalid(options);
 }
 
-export function testEncodeNamespace(namespace: number): Uint8Array {
+export function testEncodeNamespacePublicKey(namespace: number): Uint8Array {
   const bytes = new Uint8Array(8);
   const view = new DataView(bytes.buffer);
   view.setBigUint64(0, BigInt(namespace));
@@ -1091,31 +1100,48 @@ export function testEncodeNamespace(namespace: number): Uint8Array {
   return bytes;
 }
 
-export function testEncodeSubspace(number: number): Uint8Array {
+export function testEncodeNamespaceSignature(sig: number): Uint8Array {
   const bytes = new Uint8Array(8);
   const view = new DataView(bytes.buffer);
-  view.setBigUint64(0, BigInt(number));
+  view.setBigUint64(0, BigInt(sig));
 
   return bytes;
 }
 
-export function testEncodeAuthor(number: number): Uint8Array {
-  const bytes = new Uint8Array(8);
-  const view = new DataView(bytes.buffer);
-  view.setBigUint64(0, BigInt(number));
-
-  return bytes;
-}
-
-export function testEncodeAuthorSignature(bytes: Uint8Array): Uint8Array {
-  return bytes;
-}
-
-export const testDecodeAuthorSignature = testEncodeAuthorSignature;
-
-export function testDecodeSubspace(encoded: Uint8Array): number {
+export function testDecodeNamespacePublicKey(encoded: Uint8Array): number {
   const view = new DataView(encoded.buffer);
   return Number(view.getBigUint64(0));
+}
+
+export function testDecodeNamespaceSignature(encoded: Uint8Array): number {
+  const view = new DataView(encoded.buffer);
+  return Number(view.getBigUint64(0));
+}
+
+export function testEncodeSubspacePublicKey(subspace: number): Uint8Array {
+  const bytes = new Uint8Array(2);
+  const view = new DataView(bytes.buffer);
+  view.setUint16(0, subspace);
+
+  return bytes;
+}
+
+export function testEncodeSubspaceSignature(subspace: number): Uint8Array {
+  const bytes = new Uint8Array(2);
+  const view = new DataView(bytes.buffer);
+  view.setUint16(0, subspace);
+
+  return bytes;
+}
+
+export function testDecodeSubspacePublicKey(encoded: Uint8Array): number {
+  const view = new DataView(encoded.buffer);
+  return view.getUint16(0);
+}
+
+export function testDecodeSubspaceSignature(encoded: Uint8Array): number {
+  const view = new DataView(encoded.buffer);
+  return view.getUint16(0);
 }
 
 export function testIsCommunalFn(namespace: number): boolean {
@@ -1142,38 +1168,43 @@ export function testPredecessorSubspace(num: number) {
   return Math.max(num - 1, 0);
 }
 
-export function testSign(
-  // The secret is just the pubkey, which is a number.
-  secretKey: Uint8Array,
-  bytestring: Uint8Array,
-): Uint8Array {
-  return concat(
-    bytestring,
-    secretKey,
-  );
-}
+export const testNamespaceScheme: SignatureScheme<
+  number,
+  number,
+  number,
+  number
+> = {
+  generateSeed: () => 0,
+  generateKeys() {
+    const id = randomId();
 
-export function testVerify(
-  pubKey: number,
-  signature: Uint8Array,
-  bytestring: Uint8Array,
-) {
-  return equalsBytes(signature, concat(bytestring, testEncodeAuthor(pubKey)));
-}
+    return { publicKey: id, secretKey: id };
+  },
+  sign(secretKey) {
+    return secretKey;
+  },
+  verify(publicKey, signature) {
+    return publicKey === signature;
+  },
+};
+
+export const testSubspaceScheme = testNamespaceScheme;
+
+export const testSignatureScheme = testNamespaceScheme;
 
 export const TEST_MINIMAL_SUBSPACE_KEY = 0;
 
 export function getReceiverRoot<
   NamespacePublicKey,
+  NamespaceSignature,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSignature,
 >(
   cap: Capability<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature
   >,
 ):
   | SourceCap<
@@ -1182,9 +1213,11 @@ export function getReceiverRoot<
   >
   | DelegationCap<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature,
+    NamespacePublicKey | SubspacePublicKey,
+    NamespaceSignature | SubspaceSignature
   > {
   switch (cap.kind) {
     case "source": {
@@ -1204,17 +1237,17 @@ export function getReceiverRoot<
 
 export function getDelegee<
   NamespacePublicKey,
+  NamespaceSignature,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSignature,
 >(
   cap: Capability<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature
   >,
-): AuthorPublicKey | null {
+): NamespacePublicKey | SubspacePublicKey | null {
   switch (cap.kind) {
     case "source": {
       return null;

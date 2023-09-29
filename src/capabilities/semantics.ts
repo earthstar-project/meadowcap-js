@@ -1,22 +1,23 @@
+import { IsCommunalFn } from "../meadowcap/types.ts";
 import { SuccessorFn, TotalOrder } from "../order/types.ts";
 import { intersect3dProducts, merge3dProducts } from "../products/products.ts";
 import { ThreeDimensionalProduct } from "../products/types.ts";
-import { AccessMode, Capability, IsCommunalFn } from "./types.ts";
+import { AccessMode, Capability } from "./types.ts";
 
 export function getReceiver<
   NamespacePublicKey,
+  NamespaceSignature,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSignature,
 >(
   cap: Capability<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature
   >,
   isCommunalFn: IsCommunalFn<NamespacePublicKey>,
-): NamespacePublicKey | SubspacePublicKey | AuthorPublicKey {
+): NamespacePublicKey | SubspacePublicKey {
   switch (cap.kind) {
     case "source": {
       if (isCommunalFn(cap.namespaceId)) {
@@ -39,45 +40,44 @@ export function getReceiver<
 
 export function getAccessMode<
   NamespacePublicKey,
+  NamespaceSecretKey,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSecretKey,
 >(
   cap: Capability<
     NamespacePublicKey,
+    NamespaceSecretKey,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSecretKey
   >,
-  isCommunalFn: IsCommunalFn<NamespacePublicKey>,
 ): AccessMode {
   switch (cap.kind) {
     case "source": {
       return cap.accessMode;
     }
     case "delegation": {
-      return getAccessMode(cap.parent, isCommunalFn);
+      return getAccessMode(cap.parent);
     }
     case "restriction": {
-      return getAccessMode(cap.parent, isCommunalFn);
+      return getAccessMode(cap.parent);
     }
     case "merge": {
-      return getAccessMode(cap.components[0], isCommunalFn);
+      return getAccessMode(cap.components[0]);
     }
   }
 }
 
 export function getNamespace<
   NamespacePublicKey,
+  NamespaceSecretKey,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSecretKey,
 >(
   cap: Capability<
     NamespacePublicKey,
+    NamespaceSecretKey,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSecretKey
   >,
 ): NamespacePublicKey {
   switch (cap.kind) {
@@ -104,9 +104,9 @@ export function getNamespace<
 
 export function getGrantedProduct<
   NamespacePublicKey,
+  NamespaceSecretKey,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSecretKey,
 >(
   {
     isCommunalFn,
@@ -121,9 +121,9 @@ export function getGrantedProduct<
   },
   cap: Capability<
     NamespacePublicKey,
+    NamespaceSecretKey,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSecretKey
   >,
 ): ThreeDimensionalProduct<SubspacePublicKey> {
   switch (cap.kind) {
@@ -205,15 +205,15 @@ export function getGrantedProduct<
 
 export function getDelegationLimit<
   NamespacePublicKey,
+  NamespaceSecretKey,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSecretKey,
 >(
   cap: Capability<
     NamespacePublicKey,
+    NamespaceSecretKey,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSecretKey
   >,
 ): number {
   switch (cap.kind) {

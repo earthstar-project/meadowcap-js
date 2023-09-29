@@ -67,15 +67,15 @@ export interface IMeadowcap<
 > {
   // KEYPAIRS
 
-  generateNamespaceKeyPair(seed: NamespaceSeed, communal: boolean): {
+  generateNamespaceKeyPair(seed: NamespaceSeed, communal: boolean): Promise<{
     publicKey: NamespacePublicKey;
     secretKey: NamespaceSecretKey;
-  };
+  }>;
 
-  generateSubspaceKeyPair(seed: SubspaceSeed): {
+  generateSubspaceKeyPair(seed: SubspaceSeed): Promise<{
     publicKey: SubspacePublicKey;
     secretKey: SubspaceSecretKey;
-  };
+  }>;
 
   // CAPABILITIES
 
@@ -294,7 +294,7 @@ export interface IMeadowcap<
       >,
       NamespaceSignature | SubspaceSignature,
     ],
-  ): boolean;
+  ): Promise<boolean>;
 }
 
 export type IsCommunalFn<NamespacePublicKey> = (
@@ -314,13 +314,15 @@ export type KeypairEncodingScheme<PublicKey, Signature> = {
 
 export type SignatureScheme<Seed, PublicKey, SecretKey, Signature> = {
   generateSeed: () => Seed;
-  generateKeys: (seed: Seed) => { publicKey: PublicKey; secretKey: SecretKey };
-  sign: (secretKey: SecretKey, bytestring: Uint8Array) => Signature;
+  generateKeys: (
+    seed: Seed,
+  ) => Promise<{ publicKey: PublicKey; secretKey: SecretKey }>;
+  sign: (secretKey: SecretKey, bytestring: Uint8Array) => Promise<Signature>;
   verify: (
     publicKey: PublicKey,
     signature: Signature,
     bytestring: Uint8Array,
-  ) => boolean;
+  ) => Promise<boolean>;
 };
 
 export type KeypairScheme<Seed, PublicKey, SecretKey, Signature> = {

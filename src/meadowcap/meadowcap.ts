@@ -74,17 +74,18 @@ export class Meadowcap<
     >,
   ) {}
 
-  generateNamespaceKeyPair(
+  async generateNamespaceKeyPair(
     seed: NamespaceSeed,
     communal: boolean,
-  ): { publicKey: NamespacePublicKey; secretKey: NamespaceSecretKey } {
-    let keypair = this.params.namespaceKeypairScheme.signatureScheme
+  ): Promise<{ publicKey: NamespacePublicKey; secretKey: NamespaceSecretKey }> {
+    let keypair = await this.params.namespaceKeypairScheme.signatureScheme
       .generateKeys(seed);
 
     while (communal && !this.params.isCommunalFn(keypair.publicKey)) {
-      keypair = this.params.namespaceKeypairScheme.signatureScheme.generateKeys(
-        seed,
-      );
+      keypair = await this.params.namespaceKeypairScheme.signatureScheme
+        .generateKeys(
+          seed,
+        );
     }
 
     return keypair;
@@ -92,7 +93,7 @@ export class Meadowcap<
 
   generateSubspaceKeyPair(
     seed: SubspaceSeed,
-  ): { publicKey: SubspacePublicKey; secretKey: SubspaceSecretKey } {
+  ): Promise<{ publicKey: SubspacePublicKey; secretKey: SubspaceSecretKey }> {
     return this.params.subspaceKeypairScheme.signatureScheme.generateKeys(seed);
   }
 
@@ -152,7 +153,8 @@ export class Meadowcap<
       );
     }
 
-    const authorisation = this.params.subspaceKeypairScheme.signatureScheme
+    const authorisation = await this.params.subspaceKeypairScheme
+      .signatureScheme
       .sign(
         secretKey,
         hashedParent,
@@ -205,7 +207,8 @@ export class Meadowcap<
       );
     }
 
-    const authorisation = this.params.namespaceKeypairScheme.signatureScheme
+    const authorisation = await this.params.namespaceKeypairScheme
+      .signatureScheme
       .sign(
         secretKey,
         hashedParent,
@@ -585,12 +588,12 @@ export class Meadowcap<
       >,
       NamespaceSignature | SubspaceSignature,
     ],
-  ): boolean {
+  ): Promise<boolean> {
     const [cap, signature] = token;
 
     // The access mode must be 'write'.
     if (getAccessMode(cap) !== "write") {
-      return false;
+      return Promise.resolve(false);
     }
 
     // The cap's granted product must include the entry's path and timestamp.
@@ -608,7 +611,7 @@ export class Meadowcap<
         entry.identifier.path,
       ) === false
     ) {
-      return false;
+      return Promise.resolve(false);
     }
 
     if (
@@ -618,7 +621,7 @@ export class Meadowcap<
         entry.record.timestamp,
       ) === false
     ) {
-      return false;
+      return Promise.resolve(false);
     }
 
     // The signature must be authentic.

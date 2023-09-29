@@ -740,7 +740,7 @@ export async function randomDelegateCap(options: {
     parent: parentCap,
     delegationLimit: parentDelegationLimit - 1,
     delegee: delegee,
-    authorisation: sigScheme.sign(
+    authorisation: await sigScheme.sign(
       getReceiver(parentCap, testIsCommunalFn),
       concat(
         await testHash(
@@ -1006,7 +1006,7 @@ export async function randomDelegateCapInvalid(options: {
     parent: parentCap,
     delegationLimit: parentDelegationLimit + 1,
     delegee: randomId(),
-    authorisation: sigScheme.sign(
+    authorisation: await sigScheme.sign(
       getReceiver(parentCap, testIsCommunalFn),
       concat(
         await testHash(
@@ -1165,13 +1165,13 @@ export const testNamespaceScheme: KeypairScheme<
     generateKeys() {
       const id = randomId();
 
-      return { publicKey: id, secretKey: id };
+      return Promise.resolve({ publicKey: id, secretKey: id });
     },
     sign(secretKey) {
-      return secretKey;
+      return Promise.resolve(secretKey);
     },
     verify(publicKey, signature) {
-      return publicKey === signature;
+      return Promise.resolve(publicKey === signature);
     },
   },
 };
@@ -1221,13 +1221,13 @@ export const testSubspaceScheme: KeypairScheme<
     generateKeys() {
       const id = randomId();
 
-      return { publicKey: id, secretKey: id };
+      return Promise.resolve({ publicKey: id, secretKey: id });
     },
     sign(secretKey) {
-      return secretKey;
+      return Promise.resolve(secretKey);
     },
     verify(publicKey, signature) {
-      return publicKey === signature;
+      return Promise.resolve(publicKey === signature);
     },
   },
 };

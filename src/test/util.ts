@@ -1123,7 +1123,6 @@ export function testPredecessorSubspace(num: number) {
 export const testNamespaceScheme: KeypairScheme<
   number,
   number,
-  number,
   number
 > = {
   encodingScheme: {
@@ -1161,12 +1160,6 @@ export const testNamespaceScheme: KeypairScheme<
     },
   },
   signatureScheme: {
-    generateSeed: () => 0,
-    generateKeys() {
-      const id = randomId();
-
-      return Promise.resolve({ publicKey: id, secretKey: id });
-    },
     sign(secretKey) {
       return Promise.resolve(secretKey);
     },
@@ -1179,7 +1172,6 @@ export const testNamespaceScheme: KeypairScheme<
 export const testSubspaceScheme: KeypairScheme<
   number,
   number,
-  number,
   number
 > = {
   encodingScheme: {
@@ -1217,12 +1209,6 @@ export const testSubspaceScheme: KeypairScheme<
     },
   },
   signatureScheme: {
-    generateSeed: () => 0,
-    generateKeys() {
-      const id = randomId();
-
-      return Promise.resolve({ publicKey: id, secretKey: id });
-    },
     sign(secretKey) {
       return Promise.resolve(secretKey);
     },

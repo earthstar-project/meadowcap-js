@@ -11,24 +11,20 @@ import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
 import { ThreeDimensionalProduct } from "../products/types.ts";
 
 export type MeadowcapParams<
-  NamespaceSeed,
   NamespacePublicKey,
   NamespaceSecretKey,
   NamespaceSignature,
-  SubspaceSeed,
   SubspacePublicKey,
   SubspaceSecretKey,
   SubspaceSignature,
   PayloadDigest,
 > = {
   namespaceKeypairScheme: KeypairScheme<
-    NamespaceSeed,
     NamespacePublicKey,
     NamespaceSecretKey,
     NamespaceSignature
   >;
   subspaceKeypairScheme: KeypairScheme<
-    SubspaceSeed,
     SubspacePublicKey,
     SubspaceSecretKey,
     SubspaceSignature
@@ -55,28 +51,14 @@ export type MeadowcapParams<
 };
 
 export interface IMeadowcap<
-  NamespaceSeed,
   NamespacePublicKey,
   NamespaceSecretKey,
   NamespaceSignature,
-  SubspaceSeed,
   SubspacePublicKey,
   SubspaceSecretKey,
   SubspaceSignature,
   PayloadDigest,
 > {
-  // KEYPAIRS
-
-  generateNamespaceKeyPair(seed: NamespaceSeed, communal: boolean): Promise<{
-    publicKey: NamespacePublicKey;
-    secretKey: NamespaceSecretKey;
-  }>;
-
-  generateSubspaceKeyPair(seed: SubspaceSeed): Promise<{
-    publicKey: SubspacePublicKey;
-    secretKey: SubspaceSecretKey;
-  }>;
-
   // CAPABILITIES
 
   // Source capability
@@ -167,6 +149,8 @@ export interface IMeadowcap<
   >;
 
   // SEMANTICS
+
+  isCommunal(namespace: NamespacePublicKey): boolean;
 
   getCapabilityReceiver(
     cap: Capability<
@@ -285,15 +269,12 @@ export interface IMeadowcap<
 
   isAuthorisedWrite(
     entry: Entry<NamespacePublicKey, SubspacePublicKey, PayloadDigest>,
-    token: [
-      Capability<
-        NamespacePublicKey,
-        NamespaceSignature,
-        SubspacePublicKey,
-        SubspaceSignature
-      >,
-      NamespaceSignature | SubspaceSignature,
-    ],
+    token: AuthorisationToken<
+      NamespacePublicKey,
+      NamespaceSignature,
+      SubspacePublicKey,
+      SubspaceSignature
+    >,
   ): Promise<boolean>;
 }
 
@@ -312,11 +293,7 @@ export type KeypairEncodingScheme<PublicKey, Signature> = {
   signature: EncodingScheme<Signature>;
 };
 
-export type SignatureScheme<Seed, PublicKey, SecretKey, Signature> = {
-  generateSeed: () => Seed;
-  generateKeys: (
-    seed: Seed,
-  ) => Promise<{ publicKey: PublicKey; secretKey: SecretKey }>;
+export type SignatureScheme<PublicKey, SecretKey, Signature> = {
   sign: (secretKey: SecretKey, bytestring: Uint8Array) => Promise<Signature>;
   verify: (
     publicKey: PublicKey,
@@ -325,8 +302,8 @@ export type SignatureScheme<Seed, PublicKey, SecretKey, Signature> = {
   ) => Promise<boolean>;
 };
 
-export type KeypairScheme<Seed, PublicKey, SecretKey, Signature> = {
-  signatureScheme: SignatureScheme<Seed, PublicKey, SecretKey, Signature>;
+export type KeypairScheme<PublicKey, SecretKey, Signature> = {
+  signatureScheme: SignatureScheme<PublicKey, SecretKey, Signature>;
   encodingScheme: KeypairEncodingScheme<PublicKey, Signature>;
 };
 
@@ -354,3 +331,18 @@ export type Entry<NamespacePublicKey, SubspacePublicKey, PayloadDigest> = {
   identifier: RecordIdentifier<NamespacePublicKey, SubspacePublicKey>;
   record: Record<PayloadDigest>;
 };
+
+export type AuthorisationToken<
+  NamespacePublicKey,
+  NamespaceSignature,
+  SubspacePublicKey,
+  SubspaceSignature,
+> = [
+  Capability<
+    NamespacePublicKey,
+    NamespaceSignature,
+    SubspacePublicKey,
+    SubspaceSignature
+  >,
+  NamespaceSignature | SubspaceSignature,
+];

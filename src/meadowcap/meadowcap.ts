@@ -36,25 +36,26 @@ import {
   DisjointInterval,
   ThreeDimensionalProduct,
 } from "../products/types.ts";
-import { Entry, IMeadowcap, MeadowcapParams } from "./types.ts";
+import {
+  AuthorisationToken,
+  Entry,
+  IMeadowcap,
+  MeadowcapParams,
+} from "./types.ts";
 
 export class Meadowcap<
-  NamespaceSeed,
   NamespacePublicKey,
   NamespaceSecretKey,
   NamespaceSignature,
-  SubspaceSeed,
   SubspacePublicKey,
   SubspaceSecretKey,
   SubspaceSignature,
   PayloadHash,
 > implements
   IMeadowcap<
-    NamespaceSeed,
     NamespacePublicKey,
     NamespaceSecretKey,
     NamespaceSignature,
-    SubspaceSeed,
     SubspacePublicKey,
     SubspaceSecretKey,
     SubspaceSignature,
@@ -62,40 +63,15 @@ export class Meadowcap<
   > {
   constructor(
     readonly params: MeadowcapParams<
-      NamespaceSeed,
       NamespacePublicKey,
       NamespaceSecretKey,
       NamespaceSignature,
-      SubspaceSeed,
       SubspacePublicKey,
       SubspaceSecretKey,
       SubspaceSignature,
       PayloadHash
     >,
   ) {}
-
-  async generateNamespaceKeyPair(
-    seed: NamespaceSeed,
-    communal: boolean,
-  ): Promise<{ publicKey: NamespacePublicKey; secretKey: NamespaceSecretKey }> {
-    let keypair = await this.params.namespaceKeypairScheme.signatureScheme
-      .generateKeys(seed);
-
-    while (communal && !this.params.isCommunalFn(keypair.publicKey)) {
-      keypair = await this.params.namespaceKeypairScheme.signatureScheme
-        .generateKeys(
-          seed,
-        );
-    }
-
-    return keypair;
-  }
-
-  generateSubspaceKeyPair(
-    seed: SubspaceSeed,
-  ): Promise<{ publicKey: SubspacePublicKey; secretKey: SubspaceSecretKey }> {
-    return this.params.subspaceKeypairScheme.signatureScheme.generateKeys(seed);
-  }
 
   createSourceCap(
     accessMode: AccessMode,
@@ -293,6 +269,10 @@ export class Meadowcap<
 
   // SEMANTICS
 
+  isCommunal(namespace: NamespacePublicKey): boolean {
+    return this.params.isCommunalFn(namespace);
+  }
+
   getCapabilityReceiver(
     cap: Capability<
       NamespacePublicKey,
@@ -465,15 +445,15 @@ export class Meadowcap<
   ): ThreeDimensionalProduct<SubspacePublicKey> {
     const sparse: Sparse3dInterval<SubspacePublicKey> = [null, null, null];
 
-    if (openStarts.subspace) {
+    if (openStarts.subspace !== undefined) {
       sparse[0] = { kind: "open", start: openStarts.subspace };
     }
 
-    if (openStarts.path) {
+    if (openStarts.path !== undefined) {
       sparse[1] = { kind: "open", start: openStarts.path };
     }
 
-    if (openStarts.time) {
+    if (openStarts.time !== undefined) {
       sparse[2] = { kind: "open", start: openStarts.time };
     }
 
@@ -577,17 +557,74 @@ export class Meadowcap<
 
   // Authorising writes
 
+  async createAuthorisationToken(
+    entry: Entry<NamespacePublicKey, SubspacePublicKey, PayloadHash>,
+    cap: Capability<
+      NamespacePublicKey,
+      NamespaceSignature,
+      SubspacePublicKey,
+      SubspaceSignature
+    >,
+    secretKey: NamespaceSecretKey | SubspaceSecretKey,
+  ): Promise<
+    AuthorisationToken<
+      NamespacePublicKey,
+      NamespaceSignature,
+      SubspacePublicKey,
+      SubspaceSignature
+    >
+  > {
+    const timestampBytes = new Uint8Array(8);
+    const timestampView = new DataView(timestampBytes.buffer);
+    timestampView.setBigUint64(0, entry.record.timestamp);
+
+    const lengthBytes = new Uint8Array(8);
+    const lengthView = new DataView(lengthBytes.buffer);
+    lengthView.setBigUint64(0, entry.record.length);
+
+    const encodedEntry = concat(
+      this.params.namespaceKeypairScheme.encodingScheme.publicKey.encode(
+        entry.identifier.namespace,
+      ),
+      this.params.subspaceKeypairScheme.encodingScheme.publicKey.encode(
+        entry.identifier.subspace,
+      ),
+      this.params.encodePathLength(entry.identifier.path.byteLength),
+      entry.identifier.path,
+      timestampBytes,
+      lengthBytes,
+      this.params.encodePayloadHash(entry.record.hash),
+    );
+
+    const namespace = getNamespace(cap);
+
+    if (this.params.isCommunalFn(namespace)) {
+      const signature = await this.params.subspaceKeypairScheme.signatureScheme
+        .sign(
+          secretKey as SubspaceSecretKey,
+          encodedEntry,
+        );
+
+      return [cap, signature];
+    }
+
+    const signature = await this.params.namespaceKeypairScheme.signatureScheme
+      .sign(
+        secretKey as NamespaceSecretKey,
+        encodedEntry,
+      );
+
+    return [cap, signature];
+  }
+
   isAuthorisedWrite(
     entry: Entry<NamespacePublicKey, SubspacePublicKey, PayloadHash>,
-    token: [
-      Capability<
-        NamespacePublicKey,
-        NamespaceSignature,
-        SubspacePublicKey,
-        SubspaceSignature
-      >,
-      NamespaceSignature | SubspaceSignature,
-    ],
+    token: AuthorisationToken<
+      NamespacePublicKey,
+      NamespaceSignature,
+      SubspacePublicKey,
+      SubspaceSignature
+    >,
   ): Promise<boolean> {
     const [cap, signature] = token;
 

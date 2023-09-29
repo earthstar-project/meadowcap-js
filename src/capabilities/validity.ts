@@ -15,24 +15,20 @@ import { AccessMode, Capability } from "./types.ts";
 import { isCommunalDelegationCap } from "./util.ts";
 
 export async function isCapabilityValid<
-  NamespaceSeed,
   NamespacePublicKey,
   NamespaceSecretKey,
   NamespaceSignature,
-  SubspaceSeed,
   SubspacePublicKey,
   SubspaceSecretKey,
   SubspaceSignature,
 >(
   opts: {
     namespaceScheme: KeypairScheme<
-      NamespaceSeed,
       NamespacePublicKey,
       NamespaceSecretKey,
       NamespaceSignature
     >;
     subspaceScheme: KeypairScheme<
-      SubspaceSeed,
       SubspacePublicKey,
       SubspaceSecretKey,
       SubspaceSignature

@@ -9,7 +9,9 @@ import {
 
 import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
 import { ThreeDimensionalProduct } from "../products/types.ts";
+import { InvalidCapError } from "./errors.ts";
 
+// Yes. It's a lot.
 export type MeadowcapParams<
   NamespacePublicKey,
   NamespaceSecretKey,
@@ -19,34 +21,55 @@ export type MeadowcapParams<
   SubspaceSignature,
   PayloadDigest,
 > = {
+  /** The keypair signature and encoding scheme for namespace key pairs. Used when a namespace is owned.
+   *
+   * Must be the same namespace scheme used by Willow.
+   */
   namespaceKeypairScheme: KeypairScheme<
     NamespacePublicKey,
     NamespaceSecretKey,
     NamespaceSignature
   >;
+  /** The keypair signature and encoding scheme for namespace key pairs. Used when a namespace is communal.
+   *
+   * Must be the same subspace scheme used by Willow.
+   * This will usually be the same as the namespace key pair scheme, but if you use a trivial scheme here then you can effectively remove the notion of subspaces from Willow and Meadowcap.
+   */
   subspaceKeypairScheme: KeypairScheme<
     SubspacePublicKey,
     SubspaceSecretKey,
     SubspaceSignature
   >;
 
+  /** A function which determines whether a namespace is communal or not given its public key.*/
   isCommunalFn: IsCommunalFn<NamespacePublicKey>;
 
+  /** The least possible subspace public key. */
   minimalSubspacePublicKey: SubspacePublicKey;
+  /** A total order over the set of subspace public keys. */
   orderSubspace: TotalOrder<SubspacePublicKey>;
+  /** A function returning the preceding value of any given subspace. */
   predecessorSubspace: PredecessorFn<SubspacePublicKey>;
+  /** A function returning the succeeding value of any given subspace. */
   successorSubspace: SuccessorFn<SubspacePublicKey>;
+  /** A function which determines whether a value used in an inclusive range will have a shorter encoding than a value used in an exclusive range. */
   isInclusiveSmallerSubspace: (
     incl: SubspacePublicKey,
     excl: SubspacePublicKey,
   ) => boolean;
 
+  /** A function to encode the length of a path. */
   encodePathLength: (length: number) => Uint8Array;
+  /** A function to decode the length of a path */
   decodePathLength: (encoded: Uint8Array) => number;
+  /** The maximum length for any given path. */
   maxPathLength: number;
+  /** The byte length of an encoded path length. */
   pathBitIntLength: number;
 
+  /** A hash function to use with encoded capabilities. */
   hashCapability: (bytestring: Uint8Array) => Promise<Uint8Array>;
+  /** The same function used by Willow to encode payload digests. */
   encodePayloadHash: (hash: PayloadDigest) => Uint8Array;
 };
 
@@ -145,7 +168,7 @@ export interface IMeadowcap<
       NamespaceSignature,
       SubspacePublicKey,
       SubspaceSignature
-    >
+    > | InvalidCapError
   >;
 
   // SEMANTICS
@@ -278,21 +301,28 @@ export interface IMeadowcap<
   ): Promise<boolean>;
 }
 
+/** A function which determines whether a namespace is communal or not using its public key. */
 export type IsCommunalFn<NamespacePublicKey> = (
   pubkey: NamespacePublicKey,
 ) => boolean;
 
 export type EncodingScheme<ValueType> = {
+  /** A function to encode a given `ValueType`. */
   encode(value: ValueType): Uint8Array;
+  /** A function to decode a given `ValueType` */
   decode(encoded: Uint8Array): ValueType;
+  /** A function which returns the bytelength for a given `ValueType` when encoded. */
   encodedLength(value: ValueType): number;
 };
 
 export type KeypairEncodingScheme<PublicKey, Signature> = {
+  /** The encoding scheme for a key pair's public key type. */
   publicKey: EncodingScheme<PublicKey>;
+  /** The encoding scheme for a key pair's signature type. */
   signature: EncodingScheme<Signature>;
 };
 
+/** A scheme for signing and verifying data using key pairs. */
 export type SignatureScheme<PublicKey, SecretKey, Signature> = {
   sign: (secretKey: SecretKey, bytestring: Uint8Array) => Promise<Signature>;
   verify: (
@@ -332,6 +362,7 @@ export type Entry<NamespacePublicKey, SubspacePublicKey, PayloadDigest> = {
   record: Record<PayloadDigest>;
 };
 
+/** A valid capability and an accompanying signature. */
 export type AuthorisationToken<
   NamespacePublicKey,
   NamespaceSignature,

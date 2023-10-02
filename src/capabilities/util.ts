@@ -2,6 +2,7 @@ import { IsCommunalFn } from "../meadowcap/types.ts";
 import { getNamespace } from "./semantics.ts";
 import { DelegationCap } from "./types.ts";
 
+// Used to help navigate some of the type-checking palaver which the isCommunal function inevitably brings about.
 export function isCommunalDelegationCap<
   NamespacePublicKey,
   NamespaceSignature,
@@ -43,6 +44,7 @@ export function isCommunalDelegationCap<
   return false;
 }
 
+// Same as above.
 export function isSubspaceDelegee<
   NamespacePublicKey,
   SubspacePublicKey,

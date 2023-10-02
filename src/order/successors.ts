@@ -2,6 +2,9 @@ export function successorTimestamp(time: bigint): bigint {
   return time + BigInt(1);
 }
 
+// The successor of a path depends on the maximum length a path can have.
+// Once a path reaches the maximum length, the bytestring is incremented to the left,
+// e.g. [0, 0, 0, 255] -> [0, 0, 1, 255].
 export function makeSuccessorPath(
   maxLength: number,
 ): (bytes: Uint8Array) => Uint8Array {

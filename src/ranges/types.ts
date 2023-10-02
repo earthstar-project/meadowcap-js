@@ -13,6 +13,8 @@ A range is either closed, consisting of a start value and an end value, or it is
 
 A closed range includes all values greater than or equal to the start value and strictly less than the end value. An open range includes all values greater than or equal to the start value.
 */
+// In this codebase, ranges appear when we preparing a 3D product for encoding, and we need to pick one canonical representation.
+// They're not used in operations where 3D products are manipulated (intersecting, merging, etc.)
 export type Range<ValueType> = {
   kind: "open";
   start: ValueType;

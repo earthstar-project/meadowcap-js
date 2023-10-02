@@ -22,6 +22,7 @@ export function isValidInterval<ValueType>(
   order: TotalOrder<ValueType>,
   interval: Interval<ValueType>,
 ) {
+  // It's not valid if the start is greater than the end.
   if (interval.kind === "closed_exclusive") {
     const startEndOrder = order(interval.start, interval.end);
 

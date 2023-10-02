@@ -2,15 +2,10 @@ import {
   intersectIntervals,
   intervalIncludesValue,
   isEqualInterval,
-  isValid3dInterval,
   isValidInterval,
   orderIntervalPair,
 } from "../intervals/intervals.ts";
-import {
-  Interval,
-  Sparse3dInterval,
-  ThreeDimensionalInterval,
-} from "../intervals/types.ts";
+import { Interval, Sparse3dInterval } from "../intervals/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import {
   predecessorPath,
@@ -29,13 +24,14 @@ import {
   ThreeDimensionalProduct,
 } from "./types.ts";
 
-/** Adds a range to a disjoint range in such a way that the result is always canonical. */
+/** Adds a interval to a disjoint interval in such a way that the result is always canonical. */
 export function addToDisjointInterval<ValueType>(
   {
     order,
     shouldThrow,
   }: {
     order: TotalOrder<ValueType>;
+    /** Whether the function should throw if it has to reconcile non-canonically represented intervals. */
     shouldThrow?: boolean;
   },
   interval: Interval<ValueType>,
@@ -145,6 +141,7 @@ export function addToDisjointInterval<ValueType>(
   return newDisjointInterval;
 }
 
+/** Adds a range to a disjoint range in such a way that the result is always canonical. */
 export function addRangeToDisjointInterval<ValueType>(
   {
     order,
@@ -153,6 +150,7 @@ export function addRangeToDisjointInterval<ValueType>(
     successor,
   }: {
     order: TotalOrder<ValueType>;
+    /** A function which tells us if the inclusive range will have a shorter encoded length. */
     isInclusiveSmaller: (inclusive: ValueType, exclusive: ValueType) => boolean;
     predecessor: PredecessorFn<ValueType>;
     successor: SuccessorFn<ValueType>;
@@ -298,6 +296,7 @@ export function addTo3dProduct<SubspaceIdType>(
     shouldThrow,
   }: {
     orderSubspace: TotalOrder<SubspaceIdType>;
+    /** Whether the function should throw if it has to reconcile non-canonically represented intervals. */
     shouldThrow?: boolean;
   },
   interval3d: Sparse3dInterval<SubspaceIdType>,
@@ -355,6 +354,8 @@ export function intersect3dProducts<SubspaceIdType>(
   const [subspaceDjA, pathDjA, timestampDjA] = a;
   const [subspaceDjB, pathDjB, timestampDjB] = b;
 
+  // If the intersection of _any_ dimension is empty, then all dimensions must be empty.
+
   const intersectionSubspace = intersectDisjointIntervals(
     { order: orderSubspace },
     subspaceDjA,
@@ -390,6 +391,105 @@ export function intersect3dProducts<SubspaceIdType>(
     intersectionPath,
     intersectionTimestamp,
   ];
+}
+
+/** Merge many 3D products. Returns an empty product if the set is not pairwise mergeable.
+ *
+ * A set of 3d products is pairwise mergeable if any two 3d products in the set are mergeable. This is the case if and only if there is at most one dimension in which the values included by the ranges for that dimension differ between the 3d products.
+ */
+export function merge3dProducts<SubspaceIdType>(
+  { orderSubspace }: { orderSubspace: TotalOrder<SubspaceIdType> },
+  ...products: ThreeDimensionalProduct<SubspaceIdType>[]
+): ThreeDimensionalProduct<SubspaceIdType> {
+  // Check only the first two products for pairwise mergeability.
+  // If they aren't pairwise mergeable, we can bail early.
+  // Otherwise, we'll compare all other products too.
+
+  const [fst, snd] = products;
+  const [_fst, ...remainingProducts] = products;
+
+  const [subspaceDjA, pathDjA, timestampDjA] = fst;
+  const [subspaceDjB, pathDjB, timestampDjB] = snd;
+
+  const subspaceIsEqual = isEqualDisjointInterval(
+    { order: orderSubspace },
+    subspaceDjA,
+    subspaceDjB,
+  );
+  const timestampIsEqual = isEqualDisjointInterval(
+    { order: orderTimestamps },
+    timestampDjA,
+    timestampDjB,
+  );
+
+  const pathIsEqual = isEqualDisjointInterval(
+    { order: orderPaths },
+    pathDjA,
+    pathDjB,
+  );
+
+  if (!subspaceIsEqual && !timestampIsEqual && !pathIsEqual) {
+    return [[], [], []];
+  }
+
+  if (timestampIsEqual && subspaceIsEqual) {
+    // Check all remaining pairs have same subspace + timestamp.
+    const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
+      { orderSubspace, dimensions: "timestamp_subspace" },
+      ...remainingProducts,
+    );
+
+    if (allOtherPairsMatch) {
+      return [
+        subspaceDjA,
+        mergeDisjointIntervals(
+          { order: orderPaths },
+          ...products.map((product) => product[1]),
+        ),
+        timestampDjA,
+      ];
+    }
+  }
+
+  if (
+    (pathIsEqual && timestampIsEqual)
+  ) {
+    const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
+      { orderSubspace, dimensions: "timestamp_path" },
+      ...remainingProducts,
+    );
+
+    if (allOtherPairsMatch) {
+      return [
+        mergeDisjointIntervals(
+          { order: orderSubspace },
+          ...products.map((product) => product[0]),
+        ),
+        pathDjA,
+        timestampDjA,
+      ];
+    }
+  }
+
+  if ((pathIsEqual && subspaceIsEqual)) {
+    const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
+      { orderSubspace, dimensions: "path_subspace" },
+      ...remainingProducts,
+    );
+
+    if (allOtherPairsMatch) {
+      return [
+        subspaceDjA,
+        pathDjA,
+        mergeDisjointIntervals(
+          { order: orderTimestamps },
+          ...products.map((product) => product[2]),
+        ),
+      ];
+    }
+  }
+
+  return [[], [], []];
 }
 
 function allRangesNonEmptyAndMatchOnDimensions<SubspaceIdType>(
@@ -496,99 +596,7 @@ function allRangesNonEmptyAndMatchOnDimensions<SubspaceIdType>(
   return true;
 }
 
-export function merge3dProducts<SubspaceIdType>(
-  { orderSubspace }: { orderSubspace: TotalOrder<SubspaceIdType> },
-  ...products: ThreeDimensionalProduct<SubspaceIdType>[]
-): ThreeDimensionalProduct<SubspaceIdType> {
-  const [fst, snd] = products;
-  const [_fst, ...remainingProducts] = products;
-
-  const [subspaceDjA, pathDjA, timestampDjA] = fst;
-  const [subspaceDjB, pathDjB, timestampDjB] = snd;
-
-  const subspaceIsEqual = isEqualDisjointInterval(
-    { order: orderSubspace },
-    subspaceDjA,
-    subspaceDjB,
-  );
-  const timestampIsEqual = isEqualDisjointInterval(
-    { order: orderTimestamps },
-    timestampDjA,
-    timestampDjB,
-  );
-
-  const pathIsEqual = isEqualDisjointInterval(
-    { order: orderPaths },
-    pathDjA,
-    pathDjB,
-  );
-
-  if (!subspaceIsEqual && !timestampIsEqual && !pathIsEqual) {
-    return [[], [], []];
-  }
-
-  if (timestampIsEqual && subspaceIsEqual) {
-    // Check all remaining pairs have same subspace + timestamp.
-    const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
-      { orderSubspace, dimensions: "timestamp_subspace" },
-      ...remainingProducts,
-    );
-
-    if (allOtherPairsMatch) {
-      return [
-        subspaceDjA,
-        mergeDisjointIntervals(
-          { order: orderPaths },
-          ...products.map((product) => product[1]),
-        ),
-        timestampDjA,
-      ];
-    }
-  }
-
-  if (
-    (pathIsEqual && timestampIsEqual)
-  ) {
-    const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
-      { orderSubspace, dimensions: "timestamp_path" },
-      ...remainingProducts,
-    );
-
-    if (allOtherPairsMatch) {
-      return [
-        mergeDisjointIntervals(
-          { order: orderSubspace },
-          ...products.map((product) => product[0]),
-        ),
-        pathDjA,
-        timestampDjA,
-      ];
-    }
-  }
-
-  if ((pathIsEqual && subspaceIsEqual)) {
-    const allOtherPairsMatch = allRangesNonEmptyAndMatchOnDimensions(
-      { orderSubspace, dimensions: "path_subspace" },
-      ...remainingProducts,
-    );
-
-    if (allOtherPairsMatch) {
-      return [
-        subspaceDjA,
-        pathDjA,
-        mergeDisjointIntervals(
-          { order: orderTimestamps },
-          ...products.map((product) => product[2]),
-        ),
-      ];
-    }
-  }
-
-  return [[], [], []];
-}
-
-// TODO: ThreeDimensionalProduct to Canonical3dProduct fn
-
+/** Derive a canonic 3D product made of ranges from a (nearly canonic) 3D product made of intervals. */
 export function canonicProduct<SubspaceIdType>(
   {
     predecessorSubspace,
@@ -658,6 +666,7 @@ export function canonicProduct<SubspaceIdType>(
   ];
 }
 
+/** Turn a canonic 3D product of ranges into a nearly canonic 3D product of intervals. */
 export function decanoniciseProduct<SubspaceIdType>(
   { maxPathLength, successorSubspace }: {
     maxPathLength: number;

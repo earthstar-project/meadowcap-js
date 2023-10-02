@@ -20,10 +20,7 @@ import {
 } from "../capabilities/types.ts";
 import { isSubspaceDelegee } from "../capabilities/util.ts";
 import { isCapabilityValid } from "../capabilities/validity.ts";
-import {
-  Sparse3dInterval,
-  ThreeDimensionalInterval,
-} from "../intervals/types.ts";
+import { Sparse3dInterval } from "../intervals/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
 import {
@@ -32,10 +29,8 @@ import {
   intersect3dProducts,
   merge3dProducts,
 } from "../products/products.ts";
-import {
-  DisjointInterval,
-  ThreeDimensionalProduct,
-} from "../products/types.ts";
+import { ThreeDimensionalProduct } from "../products/types.ts";
+import { EncodingError, InvalidCapError } from "./errors.ts";
 import {
   AuthorisationToken,
   Entry,
@@ -43,6 +38,7 @@ import {
   MeadowcapParams,
 } from "./types.ts";
 
+/** A configured Meadowcap instance, capable of creating, signing, verifying, and encoding capabilities, and more! */
 export class Meadowcap<
   NamespacePublicKey,
   NamespaceSecretKey,
@@ -73,6 +69,7 @@ export class Meadowcap<
     >,
   ) {}
 
+  /** Create a source capability using a namespace key pair. */
   createSourceCap(
     accessMode: AccessMode,
     namespaceId: NamespacePublicKey,
@@ -91,6 +88,7 @@ export class Meadowcap<
     };
   }
 
+  /** Create a delegation capability from a capability for a communal namespace, delegated to a subspace public key, signed with a subspace secret key. */
   async createDelegateCapCommunal(
     parentCap: Capability<
       NamespacePublicKey,
@@ -145,6 +143,7 @@ export class Meadowcap<
     };
   }
 
+  /** Create a delegation capability from a capability for an owned namespace, delegated to a namespace public key, signed with a namespace secret key. */
   async createDelegateCapOwned(
     parentCap: Capability<
       NamespacePublicKey,
@@ -199,6 +198,7 @@ export class Meadowcap<
     };
   }
 
+  /** Create a restriction capabality from a given capability and a product to restrict the parent's granted product with. */
   createRestrictionCap(
     parentCap: Capability<
       NamespacePublicKey,
@@ -213,13 +213,29 @@ export class Meadowcap<
     SubspacePublicKey,
     SubspaceSignature
   > {
-    // TODO: Warn if the result granted product produces no intersection.
-
-    return {
+    const cap: RestrictionCap<
+      NamespacePublicKey,
+      NamespaceSignature,
+      SubspacePublicKey,
+      SubspaceSignature
+    > = {
       kind: "restriction",
       parent: parentCap,
       product: restrictionProduct,
     };
+
+    const grantedProduct = this.getCapabilityGrantedProduct(cap);
+
+    if (
+      grantedProduct[0].length === 0 || grantedProduct[1].length === 0 ||
+      grantedProduct[2].length === 0
+    ) {
+      console.warn(
+        "Restriction capability created granting an empty product.",
+      );
+    }
+
+    return cap;
   }
 
   async createMergeCap(
@@ -235,7 +251,7 @@ export class Meadowcap<
       NamespaceSignature,
       SubspacePublicKey,
       SubspaceSignature
-    >
+    > | InvalidCapError
   > {
     const cap = {
       kind: "merge",
@@ -261,7 +277,9 @@ export class Meadowcap<
     }, cap);
 
     if (!isValid) {
-      // TODO: Return some custom errors
+      return new InvalidCapError(
+        "Produced invalid merge capability. Ensure all components have the same access mode, receiver, and namespace, and that all granted products are pairwise mergeable.",
+      );
     }
 
     return cap;
@@ -269,10 +287,12 @@ export class Meadowcap<
 
   // SEMANTICS
 
+  /** Whether a namespace is communal or not based on its public key. */
   isCommunal(namespace: NamespacePublicKey): boolean {
     return this.params.isCommunalFn(namespace);
   }
 
+  /** Gets the receiver of a given capability. */
   getCapabilityReceiver(
     cap: Capability<
       NamespacePublicKey,
@@ -359,6 +379,10 @@ export class Meadowcap<
 
   // ENCODING
 
+  /** Encodes a capability.
+   *
+   * The encoding _can_ be used for transporting capabilities, but is usually used for signing.
+   */
   encodeCapability(
     cap: Capability<
       NamespacePublicKey,
@@ -367,8 +391,6 @@ export class Meadowcap<
       SubspaceSignature
     >,
   ): Uint8Array {
-    // TODO: Catch errors, return error types.
-
     return encodeCapability({
       isCommunalFn: this.params.isCommunalFn,
       isInclusiveSmallerSubspace: this.params.isInclusiveSmallerSubspace,
@@ -381,6 +403,10 @@ export class Meadowcap<
     }, cap);
   }
 
+  /** Decodes a capability
+   *
+   * _Can_ be used to decode capabilities received from others, but this really exists here as a courtesy.
+   */
   decodeCapability(
     encodedCapability: Uint8Array,
   ): Capability<
@@ -389,8 +415,6 @@ export class Meadowcap<
     SubspacePublicKey,
     SubspaceSignature
   > {
-    // TODO: Catch errors, return error types.
-
     return decodeCapability({
       namespaceEncodingScheme:
         this.params.namespaceKeypairScheme.encodingScheme,
@@ -409,6 +433,7 @@ export class Meadowcap<
 
   // PRODUCTS
 
+  /** Merge a set of three dimensional products. Returns an empty product if the set is not pairwise mergeable. */
   mergeProducts(
     ...products: ThreeDimensionalProduct<SubspacePublicKey>[]
   ): ThreeDimensionalProduct<SubspacePublicKey> {
@@ -417,6 +442,7 @@ export class Meadowcap<
     }, ...products);
   }
 
+  /** Intersect a set of three dimensional products. Returns an empty product if the intersection of _any_ dimension is empty. */
   intersectProducts(
     ...products: ThreeDimensionalProduct<SubspacePublicKey>[]
   ): ThreeDimensionalProduct<SubspacePublicKey> {
@@ -435,6 +461,10 @@ export class Meadowcap<
     return intersectedProducts;
   }
 
+  /** Add open ranges for the subspace / path / time dimensions to a given product.
+   *
+   * If no existing product is provided, adds the open ranges to a new empty product.
+   */
   addOpenRangeToProduct(
     openStarts: {
       subspace?: SubspacePublicKey | undefined;
@@ -467,6 +497,10 @@ export class Meadowcap<
     );
   }
 
+  /** Add closed ranges for the subspace / path / time dimensions to a given product.
+   *
+   * If no existing product is provided, adds the open ranges to a new empty product.
+   */
   addClosedRangeToProduct(
     ranges: {
       subspace?: [SubspacePublicKey, SubspacePublicKey] | undefined;
@@ -511,6 +545,10 @@ export class Meadowcap<
     );
   }
 
+  /** Add an interval including a single value for the subspace / path / time dimensions to a given product.
+   *
+   * If no existing product is provided, adds the open ranges to a new empty product.
+   */
   addSingleValueToProduct(
     values: {
       subspace?: SubspacePublicKey | undefined;
@@ -557,6 +595,7 @@ export class Meadowcap<
 
   // Authorising writes
 
+  /** Create a verifiable authorisation token for an entry and capability to which you have the corresponding secret key for. */
   async createAuthorisationToken(
     entry: Entry<NamespacePublicKey, SubspacePublicKey, PayloadHash>,
     cap: Capability<
@@ -617,6 +656,7 @@ export class Meadowcap<
     return [cap, signature];
   }
 
+  /** Used by Willow to determine whether entries are valid, i.e., to implement write-access control. */
   isAuthorisedWrite(
     entry: Entry<NamespacePublicKey, SubspacePublicKey, PayloadHash>,
     token: AuthorisationToken<

@@ -1,7 +1,9 @@
 import { ThreeDimensionalProduct } from "../products/types.ts";
 
+/** The type of access a capability grants. */
 export type AccessMode = "read" | "write";
 
+/** An unforgeable token bestowing read or write access to some data to a particular person, issued by the owner of that data. */
 export type Capability<
   NamespacePublicKey,
   NamespaceSignature,
@@ -41,6 +43,7 @@ export type Capability<
     SubspaceSignature
   >;
 
+/** A capability from which the authority of a namespace (or subspace, if the namespace is communal) is derived. */
 export type SourceCap<NamespacePublicKey, SubspacePublicKey> = {
   kind: "source";
   namespaceId: NamespacePublicKey;
@@ -48,6 +51,7 @@ export type SourceCap<NamespacePublicKey, SubspacePublicKey> = {
   accessMode: AccessMode;
 };
 
+/** A capability proving that an existing capability has been delegated to a specific author keypair. */
 export type DelegationCap<
   NamespacePublicKey,
   NamespaceSignature,
@@ -68,6 +72,7 @@ export type DelegationCap<
   delegationLimit: number;
 };
 
+/** A capability which restricts the granted product of an existing capability. */
 export type RestrictionCap<
   NamespacePublicKey,
   NamespaceSignature,
@@ -84,6 +89,7 @@ export type RestrictionCap<
   product: ThreeDimensionalProduct<SubspacePublicKey>;
 };
 
+/** A capability which merges the granted products of many similar capabilities. */
 export type MergeCap<
   NamespacePublicKey,
   NamespaceSignature,

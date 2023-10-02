@@ -1,7 +1,7 @@
 import { Interval } from "../intervals/types.ts";
 import { Range } from "../ranges/types.ts";
 
-/** One of the dimensions of a product, containing many intervals.. */
+/** One of the dimensions of a product, containing many intervals. */
 export type DisjointInterval<ValueType> = Array<Interval<ValueType>>;
 
 /** One of the canonically represented dimensions of a product, containing many ranges. */
@@ -33,6 +33,7 @@ export type CanonicProduct<SubspaceIdType> = [
   DisjointRange<bigint>,
 ];
 
+// This is used as an option for a function where we want to say which two dimensions match in a given product.
 export type DimensionPairing =
   | "timestamp_path"
   | "timestamp_subspace"

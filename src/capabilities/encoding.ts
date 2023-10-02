@@ -24,6 +24,12 @@ import {
 } from "../meadowcap/types.ts";
 import { isCommunalDelegationCap } from "./util.ts";
 
+/** Encode a capability.
+ *
+ * This encoding _can_ be used for transporting capabilities, but is really here for signing.
+ *
+ * This function doesn't check for the validity of a capability, but will throw if a restriction capability's product is not canonic.
+ */
 export function encodeCapability<
   NamespacePublicKey,
   NamespaceSignature,
@@ -121,6 +127,10 @@ export function encodeCapability<
         ? config.subspaceEncodingScheme.signature.encode(cap.authorisation)
         : config.namespaceEncodingScheme.signature.encode(cap.authorisation);
 
+      // Cap being delegated
+      // Delegation limit
+      // Encoded delegee public key
+      // Encoded signature of delegator
       encodedCapability = concat(
         encodeCapability(config, cap.parent),
         new Uint8Array([cap.delegationLimit]),
@@ -135,6 +145,8 @@ export function encodeCapability<
         isInclusiveSmallerSubspace: config.isInclusiveSmallerSubspace,
       }, cap.product);
 
+      // Cap being restricted
+      // Restriction product
       encodedCapability = concat(
         encodeCapability(config, cap.parent),
         encodeProduct({
@@ -149,18 +161,22 @@ export function encodeCapability<
       let componentLenEncoded = new Uint8Array();
 
       if (cap.components.length < 123) {
-        // Do nothing.
+        // Don't include component length, it's already in the capability type header.
       } else if (cap.components.length < 256) {
+        // Include component length as 8 bit unsigned integer.
         componentLenEncoded = new Uint8Array([cap.components.length]);
       } else if (cap.components.length < 65536) {
+        // Include component length as 16 bit unsigned integer.
         componentLenEncoded = new Uint8Array(2);
         const view = new DataView(componentLenEncoded.buffer);
         view.setUint16(0, cap.components.length);
       } else if (cap.components.length < 4294967296) {
+        // Include component length as 32 bit unsigned integer.
         componentLenEncoded = new Uint8Array(4);
         const view = new DataView(componentLenEncoded.buffer);
         view.setUint32(0, cap.components.length);
       } else {
+        // Include component length as 64 bit unsigned integer.
         componentLenEncoded = new Uint8Array(8);
         const view = new DataView(componentLenEncoded.buffer);
         view.setBigUint64(0, BigInt(cap.components.length));
@@ -185,6 +201,7 @@ export function encodeCapability<
   );
 }
 
+// You _can_ use this to pull out a capability from an encoding, but this function is mostly used for testing purposes.
 export function decodeCapability<
   NamespacePublicKey,
   NamespaceSignature,
@@ -482,6 +499,7 @@ export function decodeDelegeeAuthorisation<
   };
 }
 
+/** Encode a _canonic_ three dimensional product. */
 export function encodeProduct<SubspaceId>(
   { orderSubspace, encodeSubspacePublicKey, encodePathLength }: {
     orderSubspace: TotalOrder<SubspaceId>;
@@ -531,7 +549,9 @@ export function encodeProduct<SubspaceId>(
 
   const lengthSizeFlags = new Uint8Array([lengthSizeBits]);
 
-  // the actual lengths
+  // the actual lengths of each dimension
+  // 8bit uint if < 256
+  // 64bit uint if greater than that.
 
   let subspaceLength = new Uint8Array();
 
@@ -571,15 +591,18 @@ export function encodeProduct<SubspaceId>(
 
   // encoded subspace ranges.
 
+  // Ranges must be in order.
   const subspaceDisjointByStart = subspaceDimension.toSorted((a, b) =>
     orderSubspace(a.start, b.start)
   );
 
+  // Ranges come in chunks of 8.
   const subspaceChunks = chunk(subspaceDisjointByStart, 8);
 
   const encodedSubspaceChunks: Uint8Array[] = [];
 
   for (const chunk of subspaceChunks) {
+    // Each chunk begins with eight bits indicating whether each respective range is exclusive or inclusive.
     let exclusiveInclusiveBits = 0x0;
 
     const encodedRanges: Uint8Array[] = [];
@@ -616,6 +639,8 @@ export function encodeProduct<SubspaceId>(
     orderPaths(a.start, b.start)
   );
 
+  // Paths are also encoded in chunks of 8.
+
   const pathChunks = chunk(pathDisjointByStart, 8);
 
   const encodedPathChunks: Uint8Array[] = [];
@@ -623,6 +648,8 @@ export function encodeProduct<SubspaceId>(
   let prevPath: Uint8Array | null = null;
 
   for (const chunk of pathChunks) {
+    // Each chunk begins with eight bits indicating whether each respective range is exclusive or inclusive.
+
     let exclusiveInclusiveBits = 0x0;
 
     const encodedRanges: Uint8Array[] = [];
@@ -633,6 +660,11 @@ export function encodeProduct<SubspaceId>(
       if (!range) {
         break;
       }
+
+      // Each path is encoded as:
+      // - the length of the common prefix with the preceding path (except for the first path)
+      // - the length of the differing suffix
+      // - the encoded differing suffix
 
       if (prevPath) {
         const prefixLen = commonPrefixLength(prevPath, range.start);
@@ -700,6 +732,9 @@ export function encodeProduct<SubspaceId>(
   const encodedTimeRangesArr: Uint8Array[] = [];
 
   for (const range of timeDisjointByStart) {
+    // Finally something simple, no chunks or prefix stuff.
+    // All time ranges are either closed + exclusive or open.
+
     const startBytes = new Uint8Array(8);
     const startView = new DataView(startBytes.buffer);
     startView.setBigUint64(0, range.start);
@@ -742,6 +777,7 @@ function commonPrefixLength(a: Uint8Array, b: Uint8Array): number {
   return shortestLength;
 }
 
+// You can use this to get products from encodings, but this was really implemented for roundtrip testing.
 export function decodeProduct<
   SubspaceIdType,
 >(

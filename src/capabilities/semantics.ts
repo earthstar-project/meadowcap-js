@@ -4,6 +4,10 @@ import { intersect3dProducts, merge3dProducts } from "../products/products.ts";
 import { ThreeDimensionalProduct } from "../products/types.ts";
 import { AccessMode, Capability } from "./types.ts";
 
+/** Returns the public key belonging to the receiver of a capability.
+ *
+ * Will be of type `SubspacePublicKey` if the namespace is communal, and of `NamespacePublicKey` if not.
+ */
 export function getReceiver<
   NamespacePublicKey,
   NamespaceSignature,
@@ -38,6 +42,7 @@ export function getReceiver<
   }
 }
 
+/** Returns the access mode (read or write) of a given capability. */
 export function getAccessMode<
   NamespacePublicKey,
   NamespaceSecretKey,
@@ -67,6 +72,7 @@ export function getAccessMode<
   }
 }
 
+/** Returns the granted namespace of a capability. */
 export function getNamespace<
   NamespacePublicKey,
   NamespaceSecretKey,
@@ -90,8 +96,6 @@ export function getNamespace<
       );
     }
     case "restriction": {
-      //the granted namespace is the granted namespace of cap.parent, and
-      //	the granted product is the intersection of cap.product and the granted product of cap.parent.
       return getNamespace(
         cap.parent,
       );
@@ -102,6 +106,7 @@ export function getNamespace<
   }
 }
 
+/** Returns the granted product of a capability. */
 export function getGrantedProduct<
   NamespacePublicKey,
   NamespaceSecretKey,
@@ -158,7 +163,6 @@ export function getGrantedProduct<
       );
     }
     case "restriction": {
-      //the granted namespace is the granted namespace of cap.parent, and
       //	the granted product is the intersection of cap.product and the granted product of cap.parent.
       const parentProduct = getGrantedProduct(
         {
@@ -203,6 +207,7 @@ export function getGrantedProduct<
   }
 }
 
+/** Returns the the number of times this capability can be delegated further. */
 export function getDelegationLimit<
   NamespacePublicKey,
   NamespaceSecretKey,

@@ -1,3 +1,9 @@
+/*
+
+This is a big file of functions which generate valid and invalid cases of intervals, 3D products, capabilities, etc, used in this codebase's tests.
+
+*/
+
 import { concat } from "$std/bytes/concat.ts";
 import { encodeCapability } from "../capabilities/encoding.ts";
 import {
@@ -15,7 +21,7 @@ import {
   SourceCap,
 } from "../capabilities/types.ts";
 import { Interval, ThreeDimensionalInterval } from "../intervals/types.ts";
-import { KeypairScheme, SignatureScheme } from "../meadowcap/types.ts";
+import { KeypairScheme } from "../meadowcap/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import {
   predecessorPath,

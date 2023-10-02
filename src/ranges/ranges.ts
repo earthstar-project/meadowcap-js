@@ -45,6 +45,7 @@ export function isValid3dRange<SubspaceIdType>(
   return true;
 }
 
+/** Determines whether an inclusive range would have the same encoded length as an exclusive range, and if so, returns an exclusive version of that range. */
 export function getSmallerFromInclusiveRange<ValueType>(
   { getSuccessor, isInclusiveSmaller }: {
     getSuccessor: SuccessorFn<ValueType>;
@@ -69,6 +70,7 @@ export function getSmallerFromInclusiveRange<ValueType>(
   };
 }
 
+/** Determines whether an exclusive range would have a shorter encoded encoded length as an inclusive range, and if so, returns an exclusive version of that range. */
 export function getSmallerFromExclusiveRange<ValueType>(
   { predecessor, isInclusiveSmaller }: {
     predecessor: PredecessorFn<ValueType>;
@@ -93,6 +95,7 @@ export function getSmallerFromExclusiveRange<ValueType>(
   return exclusiveRange;
 }
 
+/** Create a new range from an `Interval`. */
 export function rangeFromInterval<ValueType>(
   {
     predecessor,

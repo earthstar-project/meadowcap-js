@@ -137,6 +137,18 @@ export function intersectIntervals<ValueType>(
   return null;
 }
 
+export function intervalIncludesValue<ValueType>(
+  { order }: { order: TotalOrder<ValueType> },
+  interval: Interval<ValueType>,
+  value: ValueType,
+): boolean {
+  if (interval.kind === "open") {
+    return order(value, interval.start) >= 0;
+  }
+
+  return order(value, interval.start) >= 0 && order(value, interval.end) === -1;
+}
+
 export function intersect3dIntervals<SubspaceIdType>(
   { orderSubspace }: { orderSubspace: TotalOrder<SubspaceIdType> },
   a: ThreeDimensionalInterval<SubspaceIdType>,

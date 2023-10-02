@@ -1,11 +1,9 @@
 import { assert } from "$std/assert/assert.ts";
 import { assertEquals } from "$std/assert/assert_equals.ts";
-import { assertThrows } from "$std/assert/assert_throws.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
 import { equals as equalsBytes } from "$std/bytes/mod.ts";
 
-import { Range, ThreeDimensionalRange } from "../ranges/types.ts";
 import {
   getIncludedValues,
   getIncludedValues3d,

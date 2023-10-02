@@ -6,15 +6,11 @@ import {
   predecessorNumber,
   randomCap,
   successorNumber,
-  testDecodeAuthorSignature,
   testDecodePathLength,
-  testDecodeSubspace,
-  testEncodeAuthor,
-  testEncodeAuthorSignature,
-  testEncodeNamespace,
   testEncodePathLength,
-  testEncodeSubspace,
   testIsCommunalFn,
+  testNamespaceScheme,
+  testSubspaceScheme,
 } from "../test/util.ts";
 import {
   decodeCapability,
@@ -28,7 +24,7 @@ Deno.test("empty product encoding", () => {
 
   const actual = encodeProduct({
     orderSubspace: orderNumber,
-    encodeSubspace: testEncodeSubspace,
+    encodeSubspacePublicKey: testSubspaceScheme.encodingScheme.publicKey.encode,
     encodePathLength: testEncodePathLength,
   }, [[], [], []]);
 
@@ -48,13 +44,14 @@ Deno.test("non-empty product encoding (roundtrip)", () => {
 
     const encoded = encodeProduct({
       orderSubspace: orderNumber,
-      encodeSubspace: testEncodeSubspace,
+      encodeSubspacePublicKey:
+        testSubspaceScheme.encodingScheme.publicKey.encode,
       encodePathLength: testEncodePathLength,
     }, canonic);
 
-    const decoded = decodeProduct({
-      decodeSubspace: testDecodeSubspace,
-      encodedSubspaceLength: 8,
+    const decoded = decodeProduct<number>({
+      subspacePublicKeyEncodingScheme:
+        testSubspaceScheme.encodingScheme.publicKey,
       isInclusiveSmallerSubspace: () => false,
       orderSubspace: orderNumber,
       decodePathLength: testDecodePathLength,
@@ -79,30 +76,22 @@ Deno.test("capability encoding", async () => {
 
     // Encode it.
     const encoded = encodeCapability({
-      encodeNamespace: testEncodeNamespace,
+      namespaceEncodingScheme: testNamespaceScheme.encodingScheme,
+      subspaceEncodingScheme: testSubspaceScheme.encodingScheme,
       encodePathLength: testEncodePathLength,
-      encodeSubspace: testEncodeSubspace,
       isCommunalFn: testIsCommunalFn,
       orderSubspace: orderNumber,
-      encodeAuthorPublicKey: testEncodeAuthor,
-      encodeAuthorSignature: testEncodeAuthorSignature,
       isInclusiveSmallerSubspace: () => false,
       predecessorSubspace: predecessorNumber,
     }, cap);
 
     // Decode it.
     const { capability: decoded, length } = decodeCapability({
-      decodeNamespace: testDecodeSubspace,
-      decodeSubspace: testDecodeSubspace,
+      namespaceEncodingScheme: testNamespaceScheme.encodingScheme,
+      subspaceEncodingScheme: testSubspaceScheme.encodingScheme,
       isCommunalFn: testIsCommunalFn,
       minimalSubspaceKey: 0,
-      namespaceKeyLength: 8,
-      authorPubkeyLength: 8,
-      authorSigLength: 49,
-      decodeAuthorPubKey: testDecodeSubspace,
-      decodeAuthorSignature: testDecodeAuthorSignature,
       decodePathLength: testDecodePathLength,
-      encodedSubspaceLength: 8,
       isInclusiveSmallerSubspace: () => false,
       maxPathLength: 4,
       orderSubspace: orderNumber,

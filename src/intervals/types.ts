@@ -8,12 +8,21 @@ export type Interval<ValueType> = {
 };
 
 export type ThreeDimensionalInterval<SubspaceIdType> = [
-  /* Subspace */
+  /** Subspace */
   Interval<SubspaceIdType>,
-  /* Path */
+  /** Path */
   Interval<Uint8Array>,
-  /* Time */
+  /** Time */
   Interval<bigint>,
+];
+
+export type Sparse3dInterval<SubspaceIdType> = [
+  /** Subspace */
+  Interval<SubspaceIdType> | null,
+  /** Path */
+  Interval<Uint8Array> | null,
+  /** Time */
+  Interval<bigint> | null,
 ];
 
 /** The order of the different types of range, ordered by desirability in canonic representation */

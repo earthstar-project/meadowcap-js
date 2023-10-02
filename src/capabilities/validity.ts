@@ -1,4 +1,5 @@
 import { concat } from "$std/bytes/concat.ts";
+import { IsCommunalFn, KeypairScheme } from "../meadowcap/types.ts";
 import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
 import { merge3dProducts } from "../products/products.ts";
 import { ThreeDimensionalProduct } from "../products/types.ts";
@@ -10,15 +11,28 @@ import {
   getNamespace,
   getReceiver,
 } from "./semantics.ts";
-import { AccessMode, Capability, IsCommunalFn, VerifyFn } from "./types.ts";
+import { AccessMode, Capability } from "./types.ts";
+import { isCommunalDelegationCap } from "./util.ts";
 
 export async function isCapabilityValid<
   NamespacePublicKey,
+  NamespaceSecretKey,
+  NamespaceSignature,
   SubspacePublicKey,
-  AuthorPublicKey,
-  AuthorSignature,
+  SubspaceSecretKey,
+  SubspaceSignature,
 >(
   opts: {
+    namespaceScheme: KeypairScheme<
+      NamespacePublicKey,
+      NamespaceSecretKey,
+      NamespaceSignature
+    >;
+    subspaceScheme: KeypairScheme<
+      SubspacePublicKey,
+      SubspaceSecretKey,
+      SubspaceSignature
+    >;
     orderSubspace: TotalOrder<SubspacePublicKey>;
     predecessorSubspace: PredecessorFn<SubspacePublicKey>;
     successorSubspace: SuccessorFn<SubspacePublicKey>;
@@ -26,32 +40,22 @@ export async function isCapabilityValid<
       inclusive: SubspacePublicKey,
       exclusive: SubspacePublicKey,
     ) => boolean;
-    isCommunal: IsCommunalFn<NamespacePublicKey>;
+    isCommunalFn: IsCommunalFn<NamespacePublicKey>;
     minimalSubspaceKey: SubspacePublicKey;
-    encodeNamespace: (namespace: NamespacePublicKey) => Uint8Array;
-    encodeSubspace: (subspace: SubspacePublicKey) => Uint8Array;
-    encodeAuthorPublicKey: (author: AuthorPublicKey) => Uint8Array;
-    encodeAuthorSignature: (signature: AuthorSignature) => Uint8Array;
     encodePathLength: (length: number) => Uint8Array;
-    verify: VerifyFn<
-      NamespacePublicKey,
-      SubspacePublicKey,
-      AuthorPublicKey,
-      AuthorSignature
-    >;
-    hashEncodedCapability: (encodedCap: Uint8Array) => Promise<Uint8Array>;
+    hashCapability: (encodedCap: Uint8Array) => Promise<Uint8Array>;
   },
   cap: Capability<
     NamespacePublicKey,
+    NamespaceSignature,
     SubspacePublicKey,
-    AuthorPublicKey,
-    AuthorSignature
+    SubspaceSignature
   >,
 ): Promise<boolean> {
   switch (cap.kind) {
     case "source": {
       // If the namespace is communal, it's always valid.
-      if (opts.isCommunal(cap.namespaceId)) {
+      if (opts.isCommunalFn(cap.namespaceId)) {
         return true;
       }
 
@@ -68,28 +72,48 @@ export async function isCapabilityValid<
       }
 
       // Verify that the authorisation for this delegation is authentic.
-      if (
-        opts.verify(
-          getReceiver(cap.parent, opts.isCommunal),
+
+      const hashedParent = await opts.hashCapability(encodeCapability({
+        namespaceEncodingScheme: opts.namespaceScheme.encodingScheme,
+        subspaceEncodingScheme: opts.subspaceScheme.encodingScheme,
+        encodePathLength: opts.encodePathLength,
+        isCommunalFn: opts.isCommunalFn,
+        isInclusiveSmallerSubspace: opts.isInclusiveSmallerSubspace,
+        orderSubspace: opts.orderSubspace,
+        predecessorSubspace: opts.predecessorSubspace,
+      }, cap.parent));
+
+      // If the delegation capability is for a communal namespace
+      // use the subspace signature scheme
+      // otherwise use the namespace signature scheme
+      if (isCommunalDelegationCap(cap, opts.isCommunalFn)) {
+        const isValid = opts.subspaceScheme.signatureScheme.verify(
+          getReceiver(cap.parent, opts.isCommunalFn) as SubspacePublicKey,
           cap.authorisation,
           concat(
-            await opts.hashEncodedCapability(encodeCapability({
-              encodeAuthorPublicKey: opts.encodeAuthorPublicKey,
-              encodeNamespace: opts.encodeNamespace,
-              encodeAuthorSignature: opts.encodeAuthorSignature,
-              encodePathLength: opts.encodePathLength,
-              encodeSubspace: opts.encodeSubspace,
-              isCommunalFn: opts.isCommunal,
-              isInclusiveSmallerSubspace: opts.isInclusiveSmallerSubspace,
-              orderSubspace: opts.orderSubspace,
-              predecessorSubspace: opts.predecessorSubspace,
-            }, cap.parent)),
+            hashedParent,
             new Uint8Array([cap.delegationLimit]),
-            opts.encodeAuthorPublicKey(cap.delegee),
+            opts.subspaceScheme.encodingScheme.publicKey.encode(cap.delegee),
           ),
-        ) === false
-      ) {
-        return false;
+        );
+
+        if (!isValid) {
+          return false;
+        }
+      } else {
+        const isValid = opts.namespaceScheme.signatureScheme.verify(
+          getReceiver(cap.parent, opts.isCommunalFn) as NamespacePublicKey,
+          cap.authorisation,
+          concat(
+            hashedParent,
+            new Uint8Array([cap.delegationLimit]),
+            opts.namespaceScheme.encodingScheme.publicKey.encode(cap.delegee),
+          ),
+        );
+
+        if (!isValid) {
+          return false;
+        }
       }
 
       // Parent capability is valid
@@ -122,11 +146,11 @@ export async function isCapabilityValid<
 
       for (const component of cap.components) {
         if (accessMode === null) {
-          accessMode = getAccessMode(component, opts.isCommunal);
+          accessMode = getAccessMode(component);
           continue;
         }
 
-        if (accessMode !== getAccessMode(component, opts.isCommunal)) {
+        if (accessMode !== getAccessMode(component)) {
           return false;
         }
       }
@@ -135,23 +159,15 @@ export async function isCapabilityValid<
       let receiver:
         | NamespacePublicKey
         | SubspacePublicKey
-        | AuthorPublicKey
         | null = null;
 
       for (const component of cap.components) {
         if (receiver === null) {
-          receiver = getReceiver(component, opts.isCommunal);
+          receiver = getReceiver(component, opts.isCommunalFn);
           continue;
         }
 
-        if (receiver !== getReceiver(component, opts.isCommunal)) {
-          console.log({
-            receiver,
-            and: getReceiver(component, opts.isCommunal),
-            component,
-            first: cap.components[0],
-          });
-
+        if (receiver !== getReceiver(component, opts.isCommunalFn)) {
           return false;
         }
       }
@@ -175,7 +191,7 @@ export async function isCapabilityValid<
 
       for (const component of cap.components) {
         grantedProducts.push(getGrantedProduct({
-          isCommunalFn: opts.isCommunal,
+          isCommunalFn: opts.isCommunalFn,
           minimalSubspaceKey: opts.minimalSubspaceKey,
           orderSubspace: opts.orderSubspace,
           successorSubspace: opts.successorSubspace,

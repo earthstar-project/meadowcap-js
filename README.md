@@ -1,7 +1,7 @@
 # meadowcap-js
 
 A TypeScript implementation of a capability system for use with the Willow
-General Purpose Sync Protocol, conformant with the
+protocol, conformant with the
 [Meadowcap specification](https://willowprotocol.org/specs/meadowcap).
 
 In Willow, a **namespace** is a self-contained data space with three dimensions:

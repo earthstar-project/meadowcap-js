@@ -42,12 +42,22 @@ provided via a `MeadowcapParams` object to construct a `Meadowcap` instance,
 which will then give you access to lots of useful methods and hopefully not have
 to think about those parameters anymore.
 
+## Usage
+
 Complete API documentation can be found
 [here](https://deno.land/x/meadowcap/mod.ts).
 
+With ESM imports:
+
+```
+import { Meadowcap } from "https://deno.land/x/meadowcap/mod.ts"
+```
+
+NPM distribution coming very soon.
+
 ## Development
 
-Deno is used as the development runtime. NPM distribution imminent.
+Deno is used as the development runtime.
 
 Tests can be run with `deno task test`.
 

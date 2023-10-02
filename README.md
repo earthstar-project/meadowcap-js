@@ -42,7 +42,14 @@ provided via a `MeadowcapParams` object to construct a `Meadowcap` instance,
 which will then give you access to lots of useful methods and hopefully not have
 to think about those parameters anymore.
 
-API documentation can be found [here](TODO).
+Complete API documentation can be found
+[here](https://deno.land/x/meadowcap/mod.ts).
+
+## Development
+
+Deno is used as the development runtime. NPM distribution imminent.
+
+Tests can be run with `deno task test`.
 
 ---
 

@@ -1,6 +1,6 @@
-import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
+import { SuccessorFn, TotalOrder } from "../order/types.ts";
 import { intersect3dProducts, merge3dProducts } from "../products/products.ts";
-import { CanonicProduct, ThreeDimensionalProduct } from "../products/types.ts";
+import { ThreeDimensionalProduct } from "../products/types.ts";
 import { AccessMode, Capability, IsCommunalFn } from "./types.ts";
 
 export function getReceiver<

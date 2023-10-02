@@ -10,7 +10,7 @@ import { chunk } from "$std/collections/chunk.ts";
 import { concat } from "$std/bytes/concat.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import { Capability, IsCommunalFn } from "./types.ts";
-import { getAccessMode, getNamespace } from "./util.ts";
+import { getAccessMode, getNamespace } from "./semantics.ts";
 import { Range } from "../ranges/types.ts";
 import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
 import {
@@ -249,6 +249,8 @@ export function decodeCapability<
       encodedCapability.slice(
         1 + config.namespaceKeyLength + parentLength + 1 +
           config.authorPubkeyLength,
+        1 + config.namespaceKeyLength + parentLength + 1 +
+          config.authorPubkeyLength + config.authorSigLength,
       ),
     );
 

@@ -291,12 +291,7 @@ Deno.test("mergeDisjointRanges", () => {
 
 Deno.test("addTo3dProduct", () => {
   for (let i = 0; i < 100; i++) {
-    const product = getRandom3dProduct({
-      minValue: 0,
-      maxSize: 100,
-      order: orderNumber,
-      successor: successorNumber,
-    });
+    const product = getRandom3dProduct({});
 
     const interval3d = getRandom3dInterval({
       minPathValue: new Uint8Array(),
@@ -385,19 +380,9 @@ Deno.test("addTo3dProduct", () => {
 Deno.test("intersect3dProducts", () => {
   for (let i = 0; i < 100; i++) {
     // Create two 3d products.
-    const product1 = getRandom3dProduct({
-      minValue: 0,
-      maxSize: 100,
-      order: orderNumber,
-      successor: successorNumber,
-    });
+    const product1 = getRandom3dProduct({});
 
-    const product2 = getRandom3dProduct({
-      minValue: 0,
-      maxSize: 100,
-      order: orderNumber,
-      successor: successorNumber,
-    });
+    const product2 = getRandom3dProduct({});
 
     const [expSubspaces1, expPaths1, expTimes1] = getIncludedValues3dProduct({
       maxSubspace: 100,
@@ -478,10 +463,6 @@ Deno.test("merge3dProducts", () => {
     if (twoDimensionsMatch) {
       // gen one product, dupe, modify one of the dimensions
       const product1 = getRandom3dProduct({
-        minValue: 0,
-        maxSize: 100,
-        order: orderNumber,
-        successor: successorNumber,
         noEmpty: true,
       });
 
@@ -695,26 +676,11 @@ Deno.test("merge3dProducts", () => {
 
       // merged will include stuff from both
     } else {
-      const product1 = getRandom3dProduct({
-        minValue: 0,
-        maxSize: 100,
-        order: orderNumber,
-        successor: successorNumber,
-      });
+      const product1 = getRandom3dProduct({});
 
-      const product2 = getRandom3dProduct({
-        minValue: 0,
-        maxSize: 100,
-        order: orderNumber,
-        successor: successorNumber,
-      });
+      const product2 = getRandom3dProduct({});
 
-      const product3 = getRandom3dProduct({
-        minValue: 0,
-        maxSize: 100,
-        order: orderNumber,
-        successor: successorNumber,
-      });
+      const product3 = getRandom3dProduct({});
 
       const merged = merge3dProducts(
         {
@@ -734,12 +700,7 @@ Deno.test("canonicProduct", () => {
   for (let i = 0; i < 100; i++) {
     // Make a random product.
 
-    const product = getRandom3dProduct({
-      minValue: 0,
-      maxSize: 100,
-      order: orderNumber,
-      successor: successorNumber,
-    });
+    const product = getRandom3dProduct({});
 
     const [subspaceDisjointRange, pathDisjointRange, timeDisjointRange] =
       canonicProduct({

@@ -11,8 +11,10 @@ import {
   predecessorPath,
   predecessorTimestamp,
 } from "../order/predecessors.ts";
-import { PredecessorFn, TotalOrder } from "../order/types.ts";
+import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
+import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
 import { getSmallerFromExclusiveRange } from "../ranges/ranges.ts";
+import { Range } from "../ranges/types.ts";
 
 import {
   CanonicProduct,
@@ -23,7 +25,7 @@ import {
 } from "./types.ts";
 
 /** Adds a range to a disjoint range in such a way that the result is always canonical. */
-export function addToDisjointIntervalCanonically<ValueType>(
+export function addToDisjointInterval<ValueType>(
   {
     order,
     shouldThrow,
@@ -138,6 +140,52 @@ export function addToDisjointIntervalCanonically<ValueType>(
   return newDisjointInterval;
 }
 
+export function addRangeToDisjointInterval<ValueType>(
+  {
+    order,
+    isInclusiveSmaller,
+    predecessor,
+    successor,
+  }: {
+    order: TotalOrder<ValueType>;
+    isInclusiveSmaller: (inclusive: ValueType, exclusive: ValueType) => boolean;
+    predecessor: PredecessorFn<ValueType>;
+    successor: SuccessorFn<ValueType>;
+  },
+  range: Range<ValueType>,
+  disjointInterval: DisjointInterval<ValueType> = [],
+): DisjointInterval<ValueType> {
+  if (range.kind === "open") {
+    return addToDisjointInterval(
+      { order, shouldThrow: true },
+      range,
+      disjointInterval,
+    );
+  } else if (range.kind === "closed_exclusive") {
+    if (isInclusiveSmaller(predecessor(range.end), range.end)) {
+      throw new Error("Non-canonical closed range");
+    }
+
+    return addToDisjointInterval(
+      { order, shouldThrow: true },
+      range,
+      disjointInterval,
+    );
+  } else {
+    const exclusiveEnd = successor(range.end);
+
+    if (!isInclusiveSmaller(range.end, exclusiveEnd)) {
+      throw new Error("Non-canonical closed range");
+    }
+
+    return addToDisjointInterval({ order, shouldThrow: true }, {
+      kind: "closed_exclusive",
+      start: range.start,
+      end: exclusiveEnd,
+    }, disjointInterval);
+  }
+}
+
 /** Intersect two disjoint intervals, presumed to be canonical. */
 export function intersectDisjointIntervals<ValueType>(
   { order }: { order: TotalOrder<ValueType> },
@@ -198,7 +246,7 @@ export function mergeDisjointIntervals<ValueType>(
 
   for (const disjointRange of rest) {
     for (const range of disjointRange) {
-      mergedDisjointRange = addToDisjointIntervalCanonically(
+      mergedDisjointRange = addToDisjointInterval(
         {
           order,
         },
@@ -243,7 +291,7 @@ export function addTo3dProduct<SubspaceIdType>(
   const [subspaceRange, pathRange, timestampRange] = interval3d;
   const [subspaceDisjoint, pathDisjoint, timestampDisjoint] = product;
 
-  const nextSubspaceDisjoint = addToDisjointIntervalCanonically(
+  const nextSubspaceDisjoint = addToDisjointInterval(
     {
       order: orderSubspace,
       shouldThrow,
@@ -252,7 +300,7 @@ export function addTo3dProduct<SubspaceIdType>(
     subspaceDisjoint,
   );
 
-  const nextPathDisjoint = addToDisjointIntervalCanonically(
+  const nextPathDisjoint = addToDisjointInterval(
     {
       order: orderPaths,
       shouldThrow,
@@ -261,7 +309,7 @@ export function addTo3dProduct<SubspaceIdType>(
     pathDisjoint,
   );
 
-  const nextTimestampDisjoint = addToDisjointIntervalCanonically(
+  const nextTimestampDisjoint = addToDisjointInterval(
     {
       order: orderTimestamps,
       shouldThrow,
@@ -586,5 +634,69 @@ export function canonicProduct<SubspaceIdType>(
     subspaceDisjointRange,
     pathDisjointRange,
     timeDisjointRange,
+  ];
+}
+
+export function decanoniciseProduct<SubspaceIdType>(
+  { maxPathLength, successorSubspace }: {
+    maxPathLength: number;
+    successorSubspace: SuccessorFn<SubspaceIdType>;
+  },
+  prod: CanonicProduct<SubspaceIdType>,
+): ThreeDimensionalProduct<SubspaceIdType> {
+  const [subspaceDisjointRange, pathDisjointRange, timeDisjointRange] = prod;
+
+  // Subspace encoding smaller
+  const subspaceDisjointInterval: DisjointInterval<SubspaceIdType> = [];
+
+  for (const range of subspaceDisjointRange) {
+    if (range.kind !== "closed_inclusive") {
+      subspaceDisjointInterval.push(range);
+      continue;
+    }
+
+    subspaceDisjointInterval.push({
+      kind: "closed_exclusive",
+      start: range.start,
+      end: successorSubspace(range.end),
+    });
+  }
+
+  // Path encoding smaller
+  const pathDisjointInterval: DisjointInterval<Uint8Array> = [];
+
+  for (const range of pathDisjointRange) {
+    if (range.kind !== "closed_inclusive") {
+      pathDisjointInterval.push(range);
+      continue;
+    }
+
+    pathDisjointInterval.push({
+      kind: "closed_exclusive",
+      start: range.start,
+      end: makeSuccessorPath(maxPathLength)(range.end),
+    });
+  }
+
+  // Time must be exclusive.
+  const timeDisjointInterval: DisjointInterval<bigint> = [];
+
+  for (const range of timeDisjointRange) {
+    if (range.kind !== "closed_inclusive") {
+      timeDisjointInterval.push(range);
+      continue;
+    }
+
+    timeDisjointInterval.push({
+      kind: "closed_exclusive",
+      start: range.start,
+      end: successorTimestamp(range.end),
+    });
+  }
+
+  return [
+    subspaceDisjointInterval,
+    pathDisjointInterval,
+    timeDisjointInterval,
   ];
 }

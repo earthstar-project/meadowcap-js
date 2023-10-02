@@ -1,3 +1,12 @@
+import { encodeCapability } from "../capabilities/encoding.ts";
+import {
+  AccessMode,
+  Capability,
+  DelegationCap,
+  MergeCap,
+  RestrictionCap,
+  SourceCap,
+} from "../capabilities/types.ts";
 import { Interval, ThreeDimensionalInterval } from "../intervals/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import {
@@ -6,7 +15,7 @@ import {
 } from "../order/predecessors.ts";
 import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
 import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
-import { addToDisjointIntervalCanonically } from "../products/products.ts";
+import { addToDisjointInterval } from "../products/products.ts";
 import {
   DisjointInterval,
   ThreeDimensionalProduct,
@@ -332,7 +341,7 @@ export function getRandomDisjointInterval<ValueType>(
       }
     }
 
-    disjointInterval = addToDisjointIntervalCanonically({ order: order }, {
+    disjointInterval = addToDisjointInterval({ order: order }, {
       kind: "closed_exclusive",
       start,
       end,
@@ -356,7 +365,7 @@ export function getRandomDisjointInterval<ValueType>(
       }
     }
 
-    disjointInterval = addToDisjointIntervalCanonically({ order: order }, {
+    disjointInterval = addToDisjointInterval({ order: order }, {
       kind: "open",
       start,
     }, disjointInterval);
@@ -540,4 +549,141 @@ export function getIncludedValues3dProduct<ValueType>(
       successor: successorTimestamp,
     }, time),
   ];
+}
+
+// Capabilities
+
+export function randomAccessMode(): AccessMode {
+  return Math.random() >= 0.5 ? "read" : "write";
+}
+
+export function randomId() {
+  return Math.floor(Math.random() * (255));
+}
+
+export function randomSourceCap(
+  { mode, namespaceId, subspaceId }: {
+    mode?: AccessMode;
+    namespaceId?: number;
+    subspaceId?: number;
+  },
+): SourceCap<number, number> {
+  const namespaceToUse = namespaceId || randomId();
+  const subspaceToUse = namespaceToUse >= 128 ? 0 : (subspaceId || randomId());
+
+  return {
+    kind: "source",
+    accessMode: mode || randomAccessMode(),
+    namespaceId: namespaceToUse,
+    subspaceId: subspaceToUse,
+  };
+}
+
+export function randomDelegateCap(options: {
+  mode?: AccessMode;
+  namespaceId?: number;
+  subspaceId?: number;
+  depthMaxDepth: [number, number];
+}): DelegationCap<number, number, number, number> {
+  const parentCap = randomCap(options);
+
+  const delegationLimit = parentCap.kind === "delegation"
+    ? parentCap.delegationLimit
+    : 255;
+
+  return {
+    kind: "delegation",
+    parent: randomCap({
+      ...options,
+      depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
+    }),
+    delegationLimit,
+    delegee: randomId(),
+    authorisation: 0,
+  };
+}
+
+export function randomRestrictionCap(options: {
+  mode?: AccessMode;
+  namespaceId?: number;
+  subspaceId?: number;
+  depthMaxDepth: [number, number];
+}): RestrictionCap<
+  number,
+  number,
+  number,
+  number
+> {
+  return {
+    kind: "restriction",
+    parent: randomCap({
+      ...options,
+      depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
+    }),
+    product: getRandom3dProduct({
+      maxSize: 100,
+      minValue: 0,
+      noEmpty: true,
+      order: orderNumber,
+      successor: successorNumber,
+    }),
+  };
+}
+
+export function randomMergeCap(options: {
+  mode?: AccessMode;
+  namespaceId?: number;
+  subspaceId?: number;
+  depthMaxDepth: [number, number];
+}): MergeCap<number, number, number, number> {
+  const components: Capability<number, number, number, number>[] = [];
+
+  const mode = options.mode || randomAccessMode();
+  const namespaceId = options.namespaceId || randomId();
+  const subspaceId = options.subspaceId || randomId();
+
+  const componentsLen = Math.floor(Math.random() * (512 - 2) + 2);
+
+  for (let i = 0; i < componentsLen; i++) {
+    components.push(randomCap({
+      mode,
+      namespaceId,
+      subspaceId,
+      noMerge: true,
+      depthMaxDepth: [options.depthMaxDepth[0] + 1, options.depthMaxDepth[1]],
+    }));
+  }
+
+  return {
+    kind: "merge",
+    components,
+  };
+}
+
+export function randomCap(options: {
+  mode?: AccessMode;
+  namespaceId?: number;
+  subspaceId?: number;
+  noMerge?: boolean;
+  depthMaxDepth: [number, number];
+}): Capability<number, number, number, number> {
+  if (options.depthMaxDepth[0] >= options.depthMaxDepth[1]) {
+    return randomSourceCap(options);
+  }
+
+  const roll = Math.random();
+
+  if (roll >= 0.75) {
+    return randomSourceCap(options);
+  } else if (roll >= 0.5) {
+    return randomDelegateCap(options);
+  } else if (roll >= 0.25) {
+    return randomRestrictionCap(options);
+  }
+
+  if (options.noMerge) {
+    return randomCap(options);
+  }
+
+  return randomMergeCap(options);
 }

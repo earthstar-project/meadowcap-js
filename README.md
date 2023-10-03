@@ -31,6 +31,10 @@ Meadowcap distinguishes between two types of namespace:
   key pair has total control over all data in the namespace, including data
   written by those who have had capabilities delegated to them.
 
+Whether a namespace is communal or not is determined by a function provided by
+you. For example, making namespaces communal if their public key ends with a `0`
+bit.
+
 Meadowcap will switch between using a (provided) subspace signature scheme or a
 namespace signature scheme depending on whether the namespace is communal or
 owned, respectively. Most of the time these schemes will be the same, but you

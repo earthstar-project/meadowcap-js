@@ -1,3 +1,5 @@
+![](meadowcap.png)
+
 # meadowcap-js
 
 A TypeScript implementation of a capability system for use with the Willow

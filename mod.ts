@@ -15,3 +15,5 @@
 
 export * from "./src/meadowcap/types.ts";
 export * from "./src/meadowcap/meadowcap.ts";
+
+export * from "./src/capabilities/types.ts";

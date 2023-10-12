@@ -21,7 +21,7 @@ import {
   SourceCap,
 } from "../capabilities/types.ts";
 import { Interval, ThreeDimensionalInterval } from "../intervals/types.ts";
-import { KeypairScheme } from "../meadowcap/types.ts";
+import { EncodingScheme, KeypairScheme } from "../meadowcap/types.ts";
 import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import {
   predecessorPath,
@@ -752,7 +752,7 @@ export async function randomDelegateCap(options: {
         await testHash(
           encodeCapability(
             {
-              encodePathLength: testEncodePathLength,
+              encodePathLength: testPathLengthScheme.encode,
               isCommunalFn: testIsCommunalFn,
               isInclusiveSmallerSubspace: () => false,
               orderSubspace: orderNumber,
@@ -1018,7 +1018,7 @@ export async function randomDelegateCapInvalid(options: {
         await testHash(
           encodeCapability(
             {
-              encodePathLength: testEncodePathLength,
+              encodePathLength: testPathLengthScheme.encode,
               isCommunalFn: testIsCommunalFn,
               isInclusiveSmallerSubspace: () => false,
               orderSubspace: orderNumber,
@@ -1104,14 +1104,6 @@ export async function randomCapInvalid(options: {
 
 export function testIsCommunalFn(namespace: number): boolean {
   return namespace < 128;
-}
-
-export function testEncodePathLength(length: number) {
-  return new Uint8Array([length]);
-}
-
-export function testDecodePathLength(bytes: Uint8Array) {
-  return bytes[0];
 }
 
 export async function testHash(encoded: Uint8Array): Promise<Uint8Array> {
@@ -1222,6 +1214,19 @@ export const testSubspaceScheme: KeypairScheme<
       return Promise.resolve(publicKey === signature);
     },
   },
+};
+
+export const testPathLengthScheme: EncodingScheme<number> & {
+  maxLength: number;
+} = {
+  encode(value) {
+    return new Uint8Array([value]);
+  },
+  decode(encoded) {
+    return encoded[0];
+  },
+  encodedLength: () => 1,
+  maxLength: 4,
 };
 
 export const TEST_MINIMAL_SUBSPACE_KEY = 0;

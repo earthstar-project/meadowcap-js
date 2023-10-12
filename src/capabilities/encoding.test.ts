@@ -6,10 +6,9 @@ import {
   predecessorNumber,
   randomCap,
   successorNumber,
-  testDecodePathLength,
-  testEncodePathLength,
   testIsCommunalFn,
   testNamespaceScheme,
+  testPathLengthScheme,
   testSubspaceScheme,
 } from "../test/util.ts";
 import {
@@ -25,7 +24,7 @@ Deno.test("empty product encoding", () => {
   const actual = encodeProduct({
     orderSubspace: orderNumber,
     encodeSubspacePublicKey: testSubspaceScheme.encodingScheme.publicKey.encode,
-    encodePathLength: testEncodePathLength,
+    encodePathLength: testPathLengthScheme.encode,
   }, [[], [], []]);
 
   assertEquals(actual, new Uint8Array([0xff]));
@@ -46,7 +45,7 @@ Deno.test("non-empty product encoding (roundtrip)", () => {
       orderSubspace: orderNumber,
       encodeSubspacePublicKey:
         testSubspaceScheme.encodingScheme.publicKey.encode,
-      encodePathLength: testEncodePathLength,
+      encodePathLength: testPathLengthScheme.encode,
     }, canonic);
 
     const decoded = decodeProduct<number>({
@@ -54,9 +53,7 @@ Deno.test("non-empty product encoding (roundtrip)", () => {
         testSubspaceScheme.encodingScheme.publicKey,
       isInclusiveSmallerSubspace: () => false,
       orderSubspace: orderNumber,
-      decodePathLength: testDecodePathLength,
-      maxPathLength: 4,
-      pathBitIntLength: 1,
+      pathLengthScheme: testPathLengthScheme,
       successorSubspace: successorNumber,
       predecessorSubspace: predecessorNumber,
     }, encoded);
@@ -78,7 +75,7 @@ Deno.test("capability encoding", async () => {
     const encoded = encodeCapability({
       namespaceEncodingScheme: testNamespaceScheme.encodingScheme,
       subspaceEncodingScheme: testSubspaceScheme.encodingScheme,
-      encodePathLength: testEncodePathLength,
+      encodePathLength: testPathLengthScheme.encode,
       isCommunalFn: testIsCommunalFn,
       orderSubspace: orderNumber,
       isInclusiveSmallerSubspace: () => false,
@@ -91,11 +88,9 @@ Deno.test("capability encoding", async () => {
       subspaceEncodingScheme: testSubspaceScheme.encodingScheme,
       isCommunalFn: testIsCommunalFn,
       minimalSubspaceKey: 0,
-      decodePathLength: testDecodePathLength,
       isInclusiveSmallerSubspace: () => false,
-      maxPathLength: 4,
       orderSubspace: orderNumber,
-      pathBitIntLength: 1,
+      pathLengthScheme: testPathLengthScheme,
       predecessorSubspace: predecessorNumber,
       successorSubspace: successorNumber,
     }, encoded);

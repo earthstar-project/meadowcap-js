@@ -4,11 +4,10 @@ import {
   predecessorNumber,
   successorNumber,
   TEST_MINIMAL_SUBSPACE_KEY,
-  testDecodePathLength,
-  testEncodePathLength,
   testHash,
   testIsCommunalFn,
   testNamespaceScheme,
+  testPathLengthScheme,
   testSubspaceScheme,
 } from "../test/util.ts";
 import { Meadowcap } from "./meadowcap.ts";
@@ -24,10 +23,7 @@ Deno.test("isAuthorisedWrite", async () => {
     predecessorSubspace: predecessorNumber,
     successorSubspace: successorNumber,
     isInclusiveSmallerSubspace: () => false,
-    encodePathLength: testEncodePathLength,
-    decodePathLength: testDecodePathLength,
-    maxPathLength: 4,
-    pathBitIntLength: 1,
+    pathLengthScheme: testPathLengthScheme,
     hashCapability: testHash,
     encodePayloadHash: (hash: Uint8Array) => hash,
   });

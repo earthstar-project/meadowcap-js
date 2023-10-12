@@ -219,8 +219,6 @@ export function decodeCapability<
       inclusive: SubspacePublicKey,
       exclusive: SubspacePublicKey,
     ) => boolean;
-    pathBitIntLength: number;
-    maxPathLength: number;
     namespaceEncodingScheme: KeypairEncodingScheme<
       NamespacePublicKey,
       NamespaceSignature
@@ -229,7 +227,9 @@ export function decodeCapability<
       SubspacePublicKey,
       SubspaceSignature
     >;
-    decodePathLength: (encoding: Uint8Array) => number;
+    pathLengthScheme: EncodingScheme<number> & {
+      maxLength: number;
+    };
   },
   encodedCapability: Uint8Array,
 ): {
@@ -352,7 +352,7 @@ export function decodeCapability<
         kind: "restriction",
         parent: parentCap,
         product: decanoniciseProduct({
-          maxPathLength: config.maxPathLength,
+          maxPathLength: config.pathLengthScheme.maxLength,
           successorSubspace: config.successorSubspace,
         }, restrictionProduct),
       },
@@ -787,9 +787,7 @@ export function decodeProduct<
     predecessorSubspace,
     successorSubspace,
     isInclusiveSmallerSubspace,
-    pathBitIntLength,
-    maxPathLength,
-    decodePathLength,
+    pathLengthScheme,
   }: {
     subspacePublicKeyEncodingScheme: EncodingScheme<SubspaceIdType>;
     orderSubspace: TotalOrder<SubspaceIdType>;
@@ -799,9 +797,9 @@ export function decodeProduct<
       inclusive: SubspaceIdType,
       exclusive: SubspaceIdType,
     ) => boolean;
-    pathBitIntLength: number;
-    maxPathLength: number;
-    decodePathLength: (encoding: Uint8Array) => number;
+    pathLengthScheme: EncodingScheme<number> & {
+      maxLength: number;
+    };
   },
   encodedProduct: Uint8Array,
 ): { product: CanonicProduct<SubspaceIdType>; length: number } {
@@ -989,17 +987,19 @@ export function decodeProduct<
       ) {
         const startCommonPrefixLength = absoluteRangeIdx === 0
           ? 0
-          : decodePathLength(encodedProduct.slice(currentPathChunkPos));
+          : pathLengthScheme.decode(encodedProduct.slice(currentPathChunkPos));
 
         if (absoluteRangeIdx !== 0) {
           currentPathChunkPos++;
         }
 
-        const startSuffixLength = decodePathLength(
+        const startSuffixLength = pathLengthScheme.decode(
           encodedProduct.slice(currentPathChunkPos),
         );
 
-        currentPathChunkPos += pathBitIntLength;
+        currentPathChunkPos += pathLengthScheme.encodedLength(
+          startSuffixLength,
+        );
 
         const startSuffix = encodedProduct.slice(
           currentPathChunkPos,
@@ -1014,17 +1014,19 @@ export function decodeProduct<
 
         currentPathChunkPos += startSuffixLength;
 
-        const endCommonPrefixLength = decodePathLength(
+        const endCommonPrefixLength = pathLengthScheme.decode(
           encodedProduct.slice(currentPathChunkPos),
         );
 
-        currentPathChunkPos += pathBitIntLength;
+        currentPathChunkPos += pathLengthScheme.encodedLength(
+          endCommonPrefixLength,
+        );
 
-        const endSuffixLength = decodePathLength(
+        const endSuffixLength = pathLengthScheme.decode(
           encodedProduct.slice(currentPathChunkPos),
         );
 
-        currentPathChunkPos += pathBitIntLength;
+        currentPathChunkPos += pathLengthScheme.encodedLength(endSuffixLength);
 
         const endSuffix = encodedProduct.slice(
           currentPathChunkPos,
@@ -1048,7 +1050,7 @@ export function decodeProduct<
         pathDisjoint = addRangeToDisjointInterval(
           {
             order: orderPaths,
-            successor: makeSuccessorPath(maxPathLength),
+            successor: makeSuccessorPath(pathLengthScheme.maxLength),
             predecessor: predecessorPath,
             isInclusiveSmaller: (incl, excl) =>
               incl.byteLength < excl.byteLength,
@@ -1064,17 +1066,19 @@ export function decodeProduct<
       ) {
         const startCommonPrefixLength = absoluteRangeIdx === 0
           ? 0
-          : decodePathLength(encodedProduct.slice(currentPathChunkPos));
+          : pathLengthScheme.decode(encodedProduct.slice(currentPathChunkPos));
 
         if (absoluteRangeIdx !== 0) {
           currentPathChunkPos++;
         }
 
-        const startSuffixLength = decodePathLength(
+        const startSuffixLength = pathLengthScheme.decode(
           encodedProduct.slice(currentPathChunkPos),
         );
 
-        currentPathChunkPos += pathBitIntLength;
+        currentPathChunkPos += pathLengthScheme.encodedLength(
+          startSuffixLength,
+        );
 
         const startSuffix = encodedProduct.slice(
           currentPathChunkPos,
@@ -1097,7 +1101,7 @@ export function decodeProduct<
         pathDisjoint = addRangeToDisjointInterval(
           {
             order: orderPaths,
-            successor: makeSuccessorPath(maxPathLength),
+            successor: makeSuccessorPath(pathLengthScheme.maxLength),
             predecessor: predecessorPath,
             isInclusiveSmaller: (incl, excl) =>
               incl.byteLength < excl.byteLength,

@@ -30,7 +30,7 @@ import {
   merge3dProducts,
 } from "../products/products.ts";
 import { ThreeDimensionalProduct } from "../products/types.ts";
-import { EncodingError, InvalidCapError } from "./errors.ts";
+import { InvalidCapError } from "./errors.ts";
 import {
   AuthorisationToken,
   Entry,
@@ -267,7 +267,7 @@ export class Meadowcap<
       namespaceScheme: this.params.namespaceKeypairScheme,
       subspaceScheme: this.params.subspaceKeypairScheme,
       successorSubspace: this.params.successorSubspace,
-      encodePathLength: this.params.encodePathLength,
+      encodePathLength: this.params.pathLengthScheme.encode,
       hashCapability: this.params.hashCapability,
       isCommunalFn: this.params.isCommunalFn,
       isInclusiveSmallerSubspace: this.params.isInclusiveSmallerSubspace,
@@ -366,7 +366,7 @@ export class Meadowcap<
     return isCapabilityValid({
       namespaceScheme: this.params.namespaceKeypairScheme,
       subspaceScheme: this.params.subspaceKeypairScheme,
-      encodePathLength: this.params.encodePathLength,
+      encodePathLength: this.params.pathLengthScheme.encode,
       hashCapability: this.params.hashCapability,
       isCommunalFn: this.params.isCommunalFn,
       isInclusiveSmallerSubspace: this.params.isInclusiveSmallerSubspace,
@@ -396,7 +396,7 @@ export class Meadowcap<
       isInclusiveSmallerSubspace: this.params.isInclusiveSmallerSubspace,
       orderSubspace: this.params.orderSubspace,
       predecessorSubspace: this.params.predecessorSubspace,
-      encodePathLength: this.params.encodePathLength,
+      encodePathLength: this.params.pathLengthScheme.encode,
       namespaceEncodingScheme:
         this.params.namespaceKeypairScheme.encodingScheme,
       subspaceEncodingScheme: this.params.subspaceKeypairScheme.encodingScheme,
@@ -424,10 +424,8 @@ export class Meadowcap<
       predecessorSubspace: this.params.predecessorSubspace,
       successorSubspace: this.params.successorSubspace,
       minimalSubspaceKey: this.params.minimalSubspacePublicKey,
-      decodePathLength: this.params.decodePathLength,
       isInclusiveSmallerSubspace: this.params.isInclusiveSmallerSubspace,
-      maxPathLength: this.params.maxPathLength,
-      pathBitIntLength: this.params.pathBitIntLength,
+      pathLengthScheme: this.params.pathLengthScheme,
     }, encodedCapability).capability;
   }
 
@@ -571,7 +569,9 @@ export class Meadowcap<
       sparse[1] = {
         kind: "closed_exclusive",
         start: values.path,
-        end: makeSuccessorPath(this.params.maxPathLength)(values.path),
+        end: makeSuccessorPath(this.params.pathLengthScheme.maxLength)(
+          values.path,
+        ),
       };
     }
 
@@ -628,7 +628,7 @@ export class Meadowcap<
       this.params.subspaceKeypairScheme.encodingScheme.publicKey.encode(
         entry.identifier.subspace,
       ),
-      this.params.encodePathLength(entry.identifier.path.byteLength),
+      this.params.pathLengthScheme.encode(entry.identifier.path.byteLength),
       entry.identifier.path,
       timestampBytes,
       lengthBytes,
@@ -720,7 +720,7 @@ export class Meadowcap<
       this.params.subspaceKeypairScheme.encodingScheme.publicKey.encode(
         entry.identifier.subspace,
       ),
-      this.params.encodePathLength(entry.identifier.path.byteLength),
+      this.params.pathLengthScheme.encode(entry.identifier.path.byteLength),
       entry.identifier.path,
       timestampBytes,
       lengthBytes,

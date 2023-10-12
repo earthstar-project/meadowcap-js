@@ -41,6 +41,10 @@ export type MeadowcapParams<
     SubspaceSignature
   >;
 
+  pathLengthScheme: EncodingScheme<number> & {
+    maxLength: number;
+  };
+
   /** A function which determines whether a namespace is communal or not given its public key.*/
   isCommunalFn: IsCommunalFn<NamespacePublicKey>;
 
@@ -57,15 +61,6 @@ export type MeadowcapParams<
     incl: SubspacePublicKey,
     excl: SubspacePublicKey,
   ) => boolean;
-
-  /** A function to encode the length of a path. */
-  encodePathLength: (length: number) => Uint8Array;
-  /** A function to decode the length of a path */
-  decodePathLength: (encoded: Uint8Array) => number;
-  /** The maximum length for any given path. */
-  maxPathLength: number;
-  /** The byte length of an encoded path length. */
-  pathBitIntLength: number;
 
   /** A hash function to use with encoded capabilities. */
   hashCapability: (bytestring: Uint8Array) => Promise<Uint8Array>;

@@ -24,7 +24,7 @@ Deno.test("isCapabilityValid (valid)", async () => {
       await isCapabilityValid({
         namespaceScheme: testNamespaceScheme,
         subspaceScheme: testSubspaceScheme,
-        encodePathLength: testPathLengthScheme.encode,
+        pathScheme: testPathLengthScheme,
         isCommunalFn: testIsCommunalFn,
         isInclusiveSmallerSubspace: () => false,
         hashCapability: testHash,
@@ -63,7 +63,7 @@ Deno.test("isCapabilityValid (invalid)", async () => {
       await isCapabilityValid({
         namespaceScheme: testNamespaceScheme,
         subspaceScheme: testSubspaceScheme,
-        encodePathLength: testPathLengthScheme.encode,
+        pathScheme: testPathLengthScheme,
         isCommunalFn: testIsCommunalFn,
         isInclusiveSmallerSubspace: () => false,
         hashCapability: testHash,

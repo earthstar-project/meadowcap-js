@@ -1,8 +1,16 @@
 import { concat } from "$std/bytes/concat.ts";
-import { IsCommunalFn, KeypairScheme } from "../meadowcap/types.ts";
-import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
-import { merge3dProducts } from "../products/products.ts";
-import { ThreeDimensionalProduct } from "../products/types.ts";
+import {
+  merge3dProducts,
+  PredecessorFn,
+  SuccessorFn,
+  ThreeDimensionalProduct,
+  TotalOrder,
+} from "../../deps.ts";
+import {
+  EncodingScheme,
+  IsCommunalFn,
+  KeypairScheme,
+} from "../meadowcap/types.ts";
 import { encodeCapability } from "./encoding.ts";
 import {
   getAccessMode,
@@ -33,6 +41,9 @@ export async function isCapabilityValid<
       SubspaceSecretKey,
       SubspaceSignature
     >;
+    pathScheme: EncodingScheme<number> & {
+      maxLength: number;
+    };
     orderSubspace: TotalOrder<SubspacePublicKey>;
     predecessorSubspace: PredecessorFn<SubspacePublicKey>;
     successorSubspace: SuccessorFn<SubspacePublicKey>;
@@ -42,7 +53,7 @@ export async function isCapabilityValid<
     ) => boolean;
     isCommunalFn: IsCommunalFn<NamespacePublicKey>;
     minimalSubspaceKey: SubspacePublicKey;
-    encodePathLength: (length: number) => Uint8Array;
+
     hashCapability: (encodedCap: Uint8Array) => Promise<Uint8Array>;
   },
   cap: Capability<
@@ -76,7 +87,7 @@ export async function isCapabilityValid<
       const hashedParent = await opts.hashCapability(encodeCapability({
         namespaceEncodingScheme: opts.namespaceScheme.encodingScheme,
         subspaceEncodingScheme: opts.subspaceScheme.encodingScheme,
-        encodePathLength: opts.encodePathLength,
+        encodePathLength: opts.pathScheme.encode,
         isCommunalFn: opts.isCommunalFn,
         isInclusiveSmallerSubspace: opts.isInclusiveSmallerSubspace,
         orderSubspace: opts.orderSubspace,
@@ -195,6 +206,7 @@ export async function isCapabilityValid<
           minimalSubspaceKey: opts.minimalSubspaceKey,
           orderSubspace: opts.orderSubspace,
           successorSubspace: opts.successorSubspace,
+          maxPathLength: opts.pathScheme.maxLength,
         }, component));
       }
 

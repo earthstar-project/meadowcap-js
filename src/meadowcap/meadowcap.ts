@@ -1,4 +1,16 @@
-import { concat } from "$std/bytes/concat.ts";
+import {
+  addTo3dProduct,
+  concat,
+  disjointIntervalIncludesValue,
+  intersect3dProducts,
+  makeSuccessorPath,
+  merge3dProducts,
+  orderPaths,
+  orderTimestamps,
+  Sparse3dInterval,
+  successorTimestamp,
+  ThreeDimensionalProduct,
+} from "../../deps.ts";
 import {
   decodeCapability,
   encodeCapability,
@@ -20,16 +32,6 @@ import {
 } from "../capabilities/types.ts";
 import { isSubspaceDelegee } from "../capabilities/util.ts";
 import { isCapabilityValid } from "../capabilities/validity.ts";
-import { Sparse3dInterval } from "../intervals/types.ts";
-import { orderPaths, orderTimestamps } from "../order/orders.ts";
-import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
-import {
-  addTo3dProduct,
-  disjointIntervalIncludesValue,
-  intersect3dProducts,
-  merge3dProducts,
-} from "../products/products.ts";
-import { ThreeDimensionalProduct } from "../products/types.ts";
 import { InvalidCapError } from "./errors.ts";
 import {
   AuthorisationToken,
@@ -266,8 +268,8 @@ export class Meadowcap<
     const isValid = await isCapabilityValid({
       namespaceScheme: this.params.namespaceKeypairScheme,
       subspaceScheme: this.params.subspaceKeypairScheme,
+      pathScheme: this.params.pathLengthScheme,
       successorSubspace: this.params.successorSubspace,
-      encodePathLength: this.params.pathLengthScheme.encode,
       hashCapability: this.params.hashCapability,
       isCommunalFn: this.params.isCommunalFn,
       isInclusiveSmallerSubspace: this.params.isInclusiveSmallerSubspace,
@@ -339,6 +341,7 @@ export class Meadowcap<
       minimalSubspaceKey: this.params.minimalSubspacePublicKey,
       orderSubspace: this.params.orderSubspace,
       successorSubspace: this.params.successorSubspace,
+      maxPathLength: this.params.pathLengthScheme.maxLength,
     }, cap);
   }
 
@@ -366,7 +369,7 @@ export class Meadowcap<
     return isCapabilityValid({
       namespaceScheme: this.params.namespaceKeypairScheme,
       subspaceScheme: this.params.subspaceKeypairScheme,
-      encodePathLength: this.params.pathLengthScheme.encode,
+      pathScheme: this.params.pathLengthScheme,
       hashCapability: this.params.hashCapability,
       isCommunalFn: this.params.isCommunalFn,
       isInclusiveSmallerSubspace: this.params.isInclusiveSmallerSubspace,
@@ -679,6 +682,7 @@ export class Meadowcap<
       minimalSubspaceKey: this.params.minimalSubspacePublicKey,
       orderSubspace: this.params.orderSubspace,
       successorSubspace: this.params.successorSubspace,
+      maxPathLength: this.params.pathLengthScheme.maxLength,
     }, cap);
 
     if (

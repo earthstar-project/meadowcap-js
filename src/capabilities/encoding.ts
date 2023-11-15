@@ -1,28 +1,30 @@
-import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
-import {
-  addRangeToDisjointInterval,
-  canonicProduct,
-  decanoniciseProduct,
-  hasOpenRange,
-} from "../products/products.ts";
-import { CanonicProduct, DisjointInterval } from "../products/types.ts";
-import { chunk } from "$std/collections/chunk.ts";
-import { concat } from "$std/bytes/concat.ts";
-import { orderPaths, orderTimestamps } from "../order/orders.ts";
 import { Capability } from "./types.ts";
 import { getAccessMode, getNamespace } from "./semantics.ts";
-import { Range } from "../ranges/types.ts";
-import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
-import {
-  predecessorPath,
-  predecessorTimestamp,
-} from "../order/predecessors.ts";
 import {
   EncodingScheme,
   IsCommunalFn,
   KeypairEncodingScheme,
 } from "../meadowcap/types.ts";
 import { isCommunalDelegationCap } from "./util.ts";
+import {
+  addRangeToDisjointInterval,
+  CanonicProduct,
+  canonicProduct,
+  chunk,
+  concat,
+  DisjointInterval,
+  hasOpenRange,
+  makeSuccessorPath,
+  orderPaths,
+  orderTimestamps,
+  PredecessorFn,
+  predecessorPath,
+  predecessorTimestamp,
+  Range,
+  SuccessorFn,
+  successorTimestamp,
+  TotalOrder,
+} from "../../deps.ts";
 
 /** Encode a capability.
  *
@@ -140,10 +142,7 @@ export function encodeCapability<
       break;
     }
     case "restriction": {
-      const restrictionProduct = canonicProduct({
-        predecessorSubspace: config.predecessorSubspace,
-        isInclusiveSmallerSubspace: config.isInclusiveSmallerSubspace,
-      }, cap.product);
+      const restrictionProduct = cap.product;
 
       // Cap being restricted
       // Restriction product
@@ -351,10 +350,7 @@ export function decodeCapability<
       capability: {
         kind: "restriction",
         parent: parentCap,
-        product: decanoniciseProduct({
-          maxPathLength: config.pathLengthScheme.maxLength,
-          successorSubspace: config.successorSubspace,
-        }, restrictionProduct),
+        product: restrictionProduct,
       },
       length: 1 + encodedNamespaceIdLength + parentLength + productLength,
     };

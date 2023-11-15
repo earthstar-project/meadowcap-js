@@ -1,7 +1,12 @@
+import {
+  decanoniciseProduct,
+  intersect3dProducts,
+  merge3dProducts,
+  SuccessorFn,
+  ThreeDimensionalProduct,
+  TotalOrder,
+} from "../../deps.ts";
 import { IsCommunalFn } from "../meadowcap/types.ts";
-import { SuccessorFn, TotalOrder } from "../order/types.ts";
-import { intersect3dProducts, merge3dProducts } from "../products/products.ts";
-import { ThreeDimensionalProduct } from "../products/types.ts";
 import { AccessMode, Capability } from "./types.ts";
 
 /** Returns the public key belonging to the receiver of a capability.
@@ -118,11 +123,13 @@ export function getGrantedProduct<
     minimalSubspaceKey,
     orderSubspace,
     successorSubspace,
+    maxPathLength,
   }: {
     isCommunalFn: IsCommunalFn<NamespacePublicKey>;
     minimalSubspaceKey: SubspacePublicKey;
     orderSubspace: TotalOrder<SubspacePublicKey>;
     successorSubspace: SuccessorFn<SubspacePublicKey>;
+    maxPathLength: number;
   },
   cap: Capability<
     NamespacePublicKey,
@@ -158,6 +165,7 @@ export function getGrantedProduct<
           minimalSubspaceKey,
           orderSubspace,
           successorSubspace,
+          maxPathLength,
         },
         cap.parent,
       );
@@ -170,6 +178,7 @@ export function getGrantedProduct<
           minimalSubspaceKey,
           orderSubspace,
           successorSubspace,
+          maxPathLength,
         },
         cap.parent,
       );
@@ -179,7 +188,10 @@ export function getGrantedProduct<
           orderSubspace,
         },
         parentProduct,
-        cap.product,
+        decanoniciseProduct({
+          successorSubspace,
+          maxPathLength,
+        }, cap.product),
       );
     }
     case "merge": {
@@ -196,6 +208,7 @@ export function getGrantedProduct<
             minimalSubspaceKey,
             orderSubspace,
             successorSubspace,
+            maxPathLength,
           }, component),
         );
       }

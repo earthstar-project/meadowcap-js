@@ -1,4 +1,10 @@
 import {
+  PredecessorFn,
+  SuccessorFn,
+  ThreeDimensionalProduct,
+  TotalOrder,
+} from "../../deps.ts";
+import {
   AccessMode,
   Capability,
   DelegationCap,
@@ -7,8 +13,6 @@ import {
   SourceCap,
 } from "../capabilities/types.ts";
 
-import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
-import { ThreeDimensionalProduct } from "../products/types.ts";
 import { InvalidCapError } from "./errors.ts";
 
 // Yes. It's a lot.

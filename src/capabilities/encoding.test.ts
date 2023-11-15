@@ -1,5 +1,5 @@
 import { assertEquals } from "$std/assert/mod.ts";
-import { canonicProduct } from "../products/products.ts";
+import { canonicProduct } from "../../deps.ts";
 import {
   getRandom3dProduct,
   orderNumber,

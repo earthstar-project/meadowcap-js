@@ -1,4 +1,4 @@
-import { ThreeDimensionalProduct } from "../products/types.ts";
+import { CanonicProduct } from "../../deps.ts";
 
 /** The type of access a capability grants. */
 export type AccessMode = "read" | "write";
@@ -86,7 +86,7 @@ export type RestrictionCap<
     SubspacePublicKey,
     SubspaceSignature
   >;
-  product: ThreeDimensionalProduct<SubspacePublicKey>;
+  product: CanonicProduct<SubspacePublicKey>;
 };
 
 /** A capability which merges the granted products of many similar capabilities. */

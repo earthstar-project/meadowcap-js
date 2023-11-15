@@ -5,6 +5,26 @@ This is a big file of functions which generate valid and invalid cases of interv
 */
 
 import { concat } from "$std/bytes/concat.ts";
+
+import {
+  addToDisjointInterval,
+  DisjointInterval,
+  Interval,
+  makeSuccessorPath,
+  orderPaths,
+  orderTimestamps,
+  PredecessorFn,
+  predecessorPath,
+  predecessorTimestamp,
+  Range,
+  rangeFromInterval,
+  SuccessorFn,
+  successorTimestamp,
+  ThreeDimensionalInterval,
+  ThreeDimensionalProduct,
+  ThreeDimensionalRange,
+  TotalOrder,
+} from "../../deps.ts";
 import { encodeCapability } from "../capabilities/encoding.ts";
 import {
   getDelegationLimit,
@@ -20,22 +40,8 @@ import {
   RestrictionCap,
   SourceCap,
 } from "../capabilities/types.ts";
-import { Interval, ThreeDimensionalInterval } from "../intervals/types.ts";
+
 import { EncodingScheme, KeypairScheme } from "../meadowcap/types.ts";
-import { orderPaths, orderTimestamps } from "../order/orders.ts";
-import {
-  predecessorPath,
-  predecessorTimestamp,
-} from "../order/predecessors.ts";
-import { makeSuccessorPath, successorTimestamp } from "../order/successors.ts";
-import { PredecessorFn, SuccessorFn, TotalOrder } from "../order/types.ts";
-import { addToDisjointInterval } from "../products/products.ts";
-import {
-  DisjointInterval,
-  ThreeDimensionalProduct,
-} from "../products/types.ts";
-import { rangeFromInterval } from "../ranges/ranges.ts";
-import { Range, ThreeDimensionalRange } from "../ranges/types.ts";
 
 export function getRandomIntervalKind(): Interval<number>["kind"] {
   return Math.random() > 0.5 ? "open" : "closed_exclusive";
@@ -795,6 +801,7 @@ export async function randomRestrictionCap(options: {
       minimalSubspaceKey: 0,
       orderSubspace: orderNumber,
       successorSubspace: successorNumber,
+      maxPathLength: testPathLengthScheme.maxLength,
     }, parentCap)),
   };
 }
@@ -832,6 +839,7 @@ export async function randomMergeCap(options: {
         minimalSubspaceKey: TEST_MINIMAL_SUBSPACE_KEY,
         orderSubspace: orderNumber,
         successorSubspace: successorNumber,
+        maxPathLength: testPathLengthScheme.maxLength,
       }, firstCap);
 
       for (let i = 0; i < componentsLen; i++) {
@@ -859,6 +867,7 @@ export async function randomMergeCap(options: {
         minimalSubspaceKey: TEST_MINIMAL_SUBSPACE_KEY,
         orderSubspace: orderNumber,
         successorSubspace: successorNumber,
+        maxPathLength: testPathLengthScheme.maxLength,
       }, parentOfFirst);
 
       const kindRoll = Math.random();
@@ -900,6 +909,7 @@ export async function randomMergeCap(options: {
         minimalSubspaceKey: TEST_MINIMAL_SUBSPACE_KEY,
         orderSubspace: orderNumber,
         successorSubspace: successorNumber,
+        maxPathLength: testPathLengthScheme.maxLength,
       }, firstCap);
 
       for (let i = 0; i < componentsLen; i++) {

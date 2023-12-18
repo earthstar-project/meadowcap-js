@@ -1,58 +1,23 @@
-import { IsCommunalFn } from "../meadowcap/types.ts";
-import { getNamespace } from "./semantics.ts";
-import { DelegationCap } from "./types.ts";
+import { CommunalCapability, OwnedCapability } from "./types.ts";
 
-// Used to help navigate some of the type-checking palaver which the isCommunal function inevitably brings about.
-export function isCommunalDelegationCap<
+export function isCommunalCap<
   NamespacePublicKey,
+  UserPublicKey,
   NamespaceSignature,
-  SubspacePublicKey,
-  SubspaceSignature,
+  UserSignature,
 >(
   cap:
-    | DelegationCap<
+    | CommunalCapability<NamespacePublicKey, UserPublicKey, UserSignature>
+    | OwnedCapability<
       NamespacePublicKey,
+      UserPublicKey,
       NamespaceSignature,
-      SubspacePublicKey,
-      SubspaceSignature,
-      NamespacePublicKey,
-      NamespaceSignature
-    >
-    | DelegationCap<
-      NamespacePublicKey,
-      NamespaceSignature,
-      SubspacePublicKey,
-      SubspaceSignature,
-      SubspacePublicKey,
-      SubspaceSignature
+      UserSignature
     >,
-  isCommunal: IsCommunalFn<NamespacePublicKey>,
-): cap is DelegationCap<
-  NamespacePublicKey,
-  NamespaceSignature,
-  SubspacePublicKey,
-  SubspaceSignature,
-  SubspacePublicKey,
-  SubspaceSignature
-> {
-  const namespace = getNamespace(cap);
-
-  if (isCommunal(namespace)) {
-    return true;
-  }
-
-  return false;
-}
-
-// Same as above.
-export function isSubspaceDelegee<
-  NamespacePublicKey,
-  SubspacePublicKey,
->(
-  delegee: NamespacePublicKey | SubspacePublicKey,
-  isCommunal: boolean,
-): delegee is SubspacePublicKey {
-  if (isCommunal) {
+): cap is CommunalCapability<NamespacePublicKey, UserPublicKey, UserSignature> {
+  if (
+    "initialAuthorisation" in cap === false
+  ) {
     return true;
   }
 

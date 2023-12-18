@@ -1,234 +1,130 @@
-import { concat } from "$std/bytes/concat.ts";
 import {
-  merge3dProducts,
-  PredecessorFn,
-  SuccessorFn,
-  ThreeDimensionalProduct,
-  TotalOrder,
-} from "../../deps.ts";
-import {
-  EncodingScheme,
-  IsCommunalFn,
+  areaIsIncluded,
+  concat,
   KeypairScheme,
-} from "../meadowcap/types.ts";
-import { encodeCapability } from "./encoding.ts";
+  PathScheme,
+} from "../../deps.ts";
+import { UserScheme } from "../parameters/types.ts";
+import { handoverCommunal, handoverOwned } from "./encoding.ts";
 import {
-  getAccessMode,
-  getDelegationLimit,
-  getGrantedProduct,
-  getNamespace,
-  getReceiver,
+  getGrantedAreaCommunal,
+  getGrantedAreaOwned,
+  getPrevCap,
 } from "./semantics.ts";
-import { AccessMode, Capability } from "./types.ts";
-import { isCommunalDelegationCap } from "./util.ts";
+import { CommunalCapability, OwnedCapability } from "./types.ts";
 
-export async function isCapabilityValid<
+export function isValidCapCommunal<
   NamespacePublicKey,
   NamespaceSecretKey,
   NamespaceSignature,
-  SubspacePublicKey,
-  SubspaceSecretKey,
-  SubspaceSignature,
+  UserPublicKey,
+  UserSecretKey,
+  UserSignature,
 >(
   opts: {
+    pathScheme: PathScheme;
     namespaceScheme: KeypairScheme<
       NamespacePublicKey,
       NamespaceSecretKey,
       NamespaceSignature
     >;
-    subspaceScheme: KeypairScheme<
-      SubspacePublicKey,
-      SubspaceSecretKey,
-      SubspaceSignature
-    >;
-    pathScheme: EncodingScheme<number> & {
-      maxLength: number;
-    };
-    orderSubspace: TotalOrder<SubspacePublicKey>;
-    predecessorSubspace: PredecessorFn<SubspacePublicKey>;
-    successorSubspace: SuccessorFn<SubspacePublicKey>;
-    isInclusiveSmallerSubspace: (
-      inclusive: SubspacePublicKey,
-      exclusive: SubspacePublicKey,
-    ) => boolean;
-    isCommunalFn: IsCommunalFn<NamespacePublicKey>;
-    minimalSubspaceKey: SubspacePublicKey;
-
-    hashCapability: (encodedCap: Uint8Array) => Promise<Uint8Array>;
+    userScheme: UserScheme<UserPublicKey, UserSecretKey, UserSignature>;
   },
-  cap: Capability<
-    NamespacePublicKey,
-    NamespaceSignature,
-    SubspacePublicKey,
-    SubspaceSignature
-  >,
+  cap: CommunalCapability<NamespacePublicKey, UserPublicKey, UserSignature>,
 ): Promise<boolean> {
-  switch (cap.kind) {
-    case "source": {
-      // If the namespace is communal, it's always valid.
-      if (opts.isCommunalFn(cap.namespaceId)) {
-        return true;
-      }
+  if (cap.delegations.length === 0) {
+    return Promise.resolve(true);
+  } else if (cap.delegations.length === 1) {
+    const prevArea = getGrantedAreaCommunal(cap);
 
-      // Otherwise the subspace must be the minimal subspace key.
-      return opts.orderSubspace(cap.subspaceId, opts.minimalSubspaceKey) === 0;
+    const [area, user, sig] = cap.delegations[0];
+
+    if (!areaIsIncluded(opts.userScheme.order, area, prevArea)) {
+      return Promise.resolve(false);
     }
-    case "delegation": {
-      // The delegation limit must be 255, or the delegation limit strictly less than its parent's.
-      if (
-        cap.delegationLimit > 255 ||
-        cap.delegationLimit >= getDelegationLimit(cap.parent)
-      ) {
-        return false;
-      }
 
-      // Verify that the authorisation for this delegation is authentic.
+    const handover = handoverCommunal(opts, getPrevCap(cap), area, user);
 
-      const hashedParent = await opts.hashCapability(encodeCapability({
-        namespaceEncodingScheme: opts.namespaceScheme.encodingScheme,
-        subspaceEncodingScheme: opts.subspaceScheme.encodingScheme,
-        encodePathLength: opts.pathScheme.encode,
-        isCommunalFn: opts.isCommunalFn,
-        isInclusiveSmallerSubspace: opts.isInclusiveSmallerSubspace,
-        orderSubspace: opts.orderSubspace,
-        predecessorSubspace: opts.predecessorSubspace,
-      }, cap.parent));
-
-      // If the delegation capability is for a communal namespace
-      // use the subspace signature scheme
-      // otherwise use the namespace signature scheme
-      if (isCommunalDelegationCap(cap, opts.isCommunalFn)) {
-        const isValid = opts.subspaceScheme.signatureScheme.verify(
-          getReceiver(cap.parent, opts.isCommunalFn) as SubspacePublicKey,
-          cap.authorisation,
-          concat(
-            hashedParent,
-            new Uint8Array([cap.delegationLimit]),
-            opts.subspaceScheme.encodingScheme.publicKey.encode(cap.delegee),
-          ),
-        );
-
-        if (!isValid) {
-          return false;
-        }
-      } else {
-        const isValid = opts.namespaceScheme.signatureScheme.verify(
-          getReceiver(cap.parent, opts.isCommunalFn) as NamespacePublicKey,
-          cap.authorisation,
-          concat(
-            hashedParent,
-            new Uint8Array([cap.delegationLimit]),
-            opts.namespaceScheme.encodingScheme.publicKey.encode(cap.delegee),
-          ),
-        );
-
-        if (!isValid) {
-          return false;
-        }
-      }
-
-      // Parent capability is valid
-      if (await isCapabilityValid(opts, cap.parent) === false) {
-        return false;
-      }
-
-      break;
-    }
-    case "restriction": {
-      // All product dimensions must have strictly less than 2^64 ranges.
-      if (
-        cap.product[0].length >= (2 ** 64) ||
-        cap.product[1].length >= (2 ** 64) ||
-        cap.product[2].length >= (2 ** 64)
-      ) {
-        return false;
-      }
-
-      // Parent capability is valid.
-      if (await isCapabilityValid(opts, cap.parent) === false) {
-        return false;
-      }
-
-      break;
-    }
-    case "merge": {
-      // Check all component access modes are the same.
-      let accessMode: AccessMode | null = null;
-
-      for (const component of cap.components) {
-        if (accessMode === null) {
-          accessMode = getAccessMode(component);
-          continue;
-        }
-
-        if (accessMode !== getAccessMode(component)) {
-          return false;
-        }
-      }
-
-      // Check all component access receivers are the same.
-      let receiver:
-        | NamespacePublicKey
-        | SubspacePublicKey
-        | null = null;
-
-      for (const component of cap.components) {
-        if (receiver === null) {
-          receiver = getReceiver(component, opts.isCommunalFn);
-          continue;
-        }
-
-        if (receiver !== getReceiver(component, opts.isCommunalFn)) {
-          return false;
-        }
-      }
-
-      // Check all component namespaces are the same.
-      let grantedNamespace: NamespacePublicKey | null = null;
-
-      for (const component of cap.components) {
-        if (grantedNamespace === null) {
-          grantedNamespace = getNamespace(component);
-          continue;
-        }
-
-        if (grantedNamespace !== getNamespace(component)) {
-          return false;
-        }
-      }
-
-      // Check all granted products are pairwise mergeable.
-      const grantedProducts: ThreeDimensionalProduct<SubspacePublicKey>[] = [];
-
-      for (const component of cap.components) {
-        grantedProducts.push(getGrantedProduct({
-          isCommunalFn: opts.isCommunalFn,
-          minimalSubspaceKey: opts.minimalSubspaceKey,
-          orderSubspace: opts.orderSubspace,
-          successorSubspace: opts.successorSubspace,
-          maxPathLength: opts.pathScheme.maxLength,
-        }, component));
-      }
-
-      const merged = merge3dProducts({
-        orderSubspace: opts.orderSubspace,
-      }, ...grantedProducts);
-
-      if (
-        merged[0].length === 0 && merged[1].length === 0 &&
-        merged[2].length === 0
-      ) {
-        return false;
-      }
-
-      // Check all components are valid
-      for (const component of cap.components) {
-        if (await isCapabilityValid(opts, component) === false) {
-          return false;
-        }
-      }
-    }
+    return opts.userScheme.signatureScheme.verify(user, sig, handover);
   }
 
-  return true;
+  const [prevArea] = cap.delegations[cap.delegations.length - 2];
+  const [area, receiver, sig] = cap.delegations[cap.delegations.length - 1];
+
+  if (!areaIsIncluded(opts.userScheme.order, area, prevArea)) {
+    return Promise.resolve(false);
+  }
+
+  const handover = handoverCommunal(opts, getPrevCap(cap), area, receiver);
+
+  return opts.userScheme.signatureScheme.verify(receiver, sig, handover);
+}
+
+export function isValidCapOwned<
+  NamespacePublicKey,
+  NamespaceSecretKey,
+  NamespaceSignature,
+  UserPublicKey,
+  UserSecretKey,
+  UserSignature,
+>(
+  opts: {
+    pathScheme: PathScheme;
+    namespaceScheme: KeypairScheme<
+      NamespacePublicKey,
+      NamespaceSecretKey,
+      NamespaceSignature
+    >;
+    userScheme: UserScheme<UserPublicKey, UserSecretKey, UserSignature>;
+  },
+  cap: OwnedCapability<
+    NamespacePublicKey,
+    UserPublicKey,
+    NamespaceSignature,
+    UserSignature
+  >,
+): Promise<boolean> {
+  if (cap.delegations.length === 0) {
+    const accessModeByte = new Uint8Array([
+      cap.accessMode === "read" ? 0x0 : 0x1,
+    ]);
+
+    const message = concat(
+      accessModeByte,
+      opts.userScheme.encodingScheme.publicKey.encode(cap.userKey),
+    );
+
+    return opts.namespaceScheme.signatureScheme.verify(
+      cap.namespaceKey,
+      cap.initialAuthorisation,
+      message,
+    );
+  }
+
+  const prevCap = getPrevCap(cap);
+
+  if (prevCap.delegations.length === 0) {
+    const [area, receiver, sig] = cap.delegations[0];
+
+    const prevArea = getGrantedAreaOwned(prevCap);
+
+    if (!areaIsIncluded(opts.userScheme.order, area, prevArea)) {
+      return Promise.resolve(false);
+    }
+
+    const handover = handoverOwned(opts, prevCap, area, receiver);
+
+    return opts.userScheme.signatureScheme.verify(receiver, sig, handover);
+  }
+
+  const [prevArea] = cap.delegations[cap.delegations.length - 2];
+  const [area, receiver, sig] = cap.delegations[cap.delegations.length - 1];
+
+  if (!areaIsIncluded(opts.userScheme.order, area, prevArea)) {
+    return Promise.resolve(false);
+  }
+
+  const handover = handoverOwned(opts, prevCap, area, receiver);
+
+  return opts.userScheme.signatureScheme.verify(receiver, sig, handover);
 }

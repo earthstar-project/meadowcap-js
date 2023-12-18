@@ -1,106 +1,64 @@
-import { CanonicProduct } from "../../deps.ts";
+import { Area } from "../../deps.ts";
 
 /** The type of access a capability grants. */
 export type AccessMode = "read" | "write";
 
-/** An unforgeable token bestowing read or write access to some data to a particular person, issued by the owner of that data. */
+export type Delegation<UserPublicKey, UserSignature> = [
+  Area<UserPublicKey>,
+  UserPublicKey,
+  UserSignature,
+];
+
+/** A capability that implements communal namespaces. */
+export type CommunalCapability<
+  NamespacePublicKey,
+  UserPublicKey,
+  UserSignature,
+> = {
+  /** The kind of access this capability grants. */
+  accessMode: AccessMode;
+  /** The namespace in which this grants access. */
+  namespaceKey: NamespacePublicKey;
+  /** The subspace for which and to whom this capability grants access. */
+  userKey: UserPublicKey;
+  /** Successive authorizations of new UserPublicKeys, each restricted to a particular Area. */
+  delegations: Delegation<UserPublicKey, UserSignature>[];
+};
+
+/** A capability that implements owned namespaces. */
+export type OwnedCapability<
+  NamespacePublicKey,
+  UserPublicKey,
+  NamespaceSignature,
+  UserSignature,
+> = {
+  /** The kind of access this capability grants. */
+  accessMode: AccessMode;
+  /** The namespace for which this grants access. */
+  namespaceKey: NamespacePublicKey;
+  /** The user to whom this grants access; granting access for the full namespace_key, not just to a subspace. */
+  userKey: UserPublicKey;
+  /** Authorization of the user_key by the owned_namespace_key. */
+  initialAuthorisation: NamespaceSignature;
+  /** Successive authorizations of new UserPublicKeys, each restricted to a particular Area. */
+  delegations: Delegation<UserPublicKey, UserSignature>[];
+};
+
+/** A Meadowcap capability */
 export type Capability<
   NamespacePublicKey,
+  UserPublicKey,
   NamespaceSignature,
-  SubspacePublicKey,
-  SubspaceSignature,
+  UserSignature,
 > =
-  | SourceCap<
+  | CommunalCapability<
     NamespacePublicKey,
-    SubspacePublicKey
+    UserPublicKey,
+    UserSignature
   >
-  | DelegationCap<
+  | OwnedCapability<
     NamespacePublicKey,
+    UserPublicKey,
     NamespaceSignature,
-    SubspacePublicKey,
-    SubspaceSignature,
-    NamespacePublicKey,
-    NamespaceSignature
-  >
-  | DelegationCap<
-    NamespacePublicKey,
-    NamespaceSignature,
-    SubspacePublicKey,
-    SubspaceSignature,
-    SubspacePublicKey,
-    SubspaceSignature
-  >
-  | RestrictionCap<
-    NamespacePublicKey,
-    NamespaceSignature,
-    SubspacePublicKey,
-    SubspaceSignature
-  >
-  | MergeCap<
-    NamespacePublicKey,
-    NamespaceSignature,
-    SubspacePublicKey,
-    SubspaceSignature
+    UserSignature
   >;
-
-/** A capability from which the authority of a namespace (or subspace, if the namespace is communal) is derived. */
-export type SourceCap<NamespacePublicKey, SubspacePublicKey> = {
-  kind: "source";
-  namespaceId: NamespacePublicKey;
-  subspaceId: SubspacePublicKey;
-  accessMode: AccessMode;
-};
-
-/** A capability proving that an existing capability has been delegated to a specific author keypair. */
-export type DelegationCap<
-  NamespacePublicKey,
-  NamespaceSignature,
-  SubspacePublicKey,
-  SubspaceSignature,
-  AuthorPublicKey,
-  AuthorSignature,
-> = {
-  kind: "delegation";
-  parent: Capability<
-    NamespacePublicKey,
-    NamespaceSignature,
-    SubspacePublicKey,
-    SubspaceSignature
-  >;
-  delegee: AuthorPublicKey;
-  authorisation: AuthorSignature;
-  delegationLimit: number;
-};
-
-/** A capability which restricts the granted product of an existing capability. */
-export type RestrictionCap<
-  NamespacePublicKey,
-  NamespaceSignature,
-  SubspacePublicKey,
-  SubspaceSignature,
-> = {
-  kind: "restriction";
-  parent: Capability<
-    NamespacePublicKey,
-    NamespaceSignature,
-    SubspacePublicKey,
-    SubspaceSignature
-  >;
-  product: CanonicProduct<SubspacePublicKey>;
-};
-
-/** A capability which merges the granted products of many similar capabilities. */
-export type MergeCap<
-  NamespacePublicKey,
-  NamespaceSignature,
-  SubspacePublicKey,
-  SubspaceSignature,
-> = {
-  kind: "merge";
-  components: Capability<
-    NamespacePublicKey,
-    NamespaceSignature,
-    SubspacePublicKey,
-    SubspaceSignature
-  >[];
-};

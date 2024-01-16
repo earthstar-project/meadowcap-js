@@ -2,9 +2,12 @@
 
 # meadowcap-js
 
-A TypeScript implementation of a capability system for use with the Willow
-protocol, conformant with the
+A TypeScript implementation of a capability system for use with the
+[Willow protocol](https://willowprotocol.org), according to the
 [Meadowcap specification](https://willowprotocol.org/specs/meadowcap).
+
+**This implementation is currently being updated to conform to the latest
+Meadowcap specification.**
 
 In Willow, a **namespace** is a self-contained data space with three dimensions:
 time, path, and subspace. A namespace's individual _entries_ belong to points

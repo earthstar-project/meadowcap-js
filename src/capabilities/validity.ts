@@ -3,17 +3,29 @@ import {
   concat,
   KeypairScheme,
   PathScheme,
+  SubspaceScheme,
 } from "../../deps.ts";
-import { UserScheme } from "../parameters/types.ts";
-import { handoverCommunal, handoverOwned } from "./encoding.ts";
+import {
+  handoverCommunal,
+  handoverOwned,
+  handoverSubspace,
+} from "./encoding.ts";
 import {
   getGrantedAreaCommunal,
   getGrantedAreaOwned,
   getPrevCap,
+  getPrevCapSubspace,
+  getReceiver,
+  getReceiverSubspaceCap,
 } from "./semantics.ts";
-import { CommunalCapability, OwnedCapability } from "./types.ts";
+import {
+  CommunalCapability,
+  McSubspaceCapability,
+  OwnedCapability,
+} from "./types.ts";
 
-export function isValidCapCommunal<
+/** Returns whether a communal capability is valid. */
+export async function isValidCapCommunal<
   NamespacePublicKey,
   NamespaceSecretKey,
   NamespaceSignature,
@@ -28,39 +40,43 @@ export function isValidCapCommunal<
       NamespaceSecretKey,
       NamespaceSignature
     >;
-    userScheme: UserScheme<UserPublicKey, UserSecretKey, UserSignature>;
+    userScheme: SubspaceScheme<UserPublicKey, UserSecretKey, UserSignature>;
   },
   cap: CommunalCapability<NamespacePublicKey, UserPublicKey, UserSignature>,
 ): Promise<boolean> {
   if (cap.delegations.length === 0) {
     return Promise.resolve(true);
-  } else if (cap.delegations.length === 1) {
-    const prevArea = getGrantedAreaCommunal(cap);
-
-    const [area, user, sig] = cap.delegations[0];
-
-    if (!areaIsIncluded(opts.userScheme.order, area, prevArea)) {
-      return Promise.resolve(false);
-    }
-
-    const handover = handoverCommunal(opts, getPrevCap(cap), area, user);
-
-    return opts.userScheme.signatureScheme.verify(user, sig, handover);
   }
 
-  const [prevArea] = cap.delegations[cap.delegations.length - 2];
-  const [area, receiver, sig] = cap.delegations[cap.delegations.length - 1];
+  const [newArea, newUser, newSignature] =
+    cap.delegations[cap.delegations.length - 1];
+  const prevCap = getPrevCap(cap);
 
-  if (!areaIsIncluded(opts.userScheme.order, area, prevArea)) {
-    return Promise.resolve(false);
+  if (await isValidCapCommunal(opts, prevCap) === false) {
+    return false;
   }
 
-  const handover = handoverCommunal(opts, getPrevCap(cap), area, receiver);
+  const prevGrantedArea = getGrantedAreaCommunal(prevCap);
 
-  return opts.userScheme.signatureScheme.verify(receiver, sig, handover);
+  if (
+    areaIsIncluded(opts.userScheme.order, newArea, prevGrantedArea) === false
+  ) {
+    return false;
+  }
+
+  const prevReceiver = getReceiver(prevCap);
+
+  const handover = handoverCommunal(opts, prevCap, newArea, newUser);
+
+  return opts.userScheme.signatureScheme.verify(
+    prevReceiver,
+    newSignature,
+    handover,
+  );
 }
 
-export function isValidCapOwned<
+/** Returns whether an owned capability is valid. */
+export async function isValidCapOwned<
   NamespacePublicKey,
   NamespaceSecretKey,
   NamespaceSignature,
@@ -75,7 +91,7 @@ export function isValidCapOwned<
       NamespaceSecretKey,
       NamespaceSignature
     >;
-    userScheme: UserScheme<UserPublicKey, UserSecretKey, UserSignature>;
+    userScheme: SubspaceScheme<UserPublicKey, UserSecretKey, UserSignature>;
   },
   cap: OwnedCapability<
     NamespacePublicKey,
@@ -86,7 +102,7 @@ export function isValidCapOwned<
 ): Promise<boolean> {
   if (cap.delegations.length === 0) {
     const accessModeByte = new Uint8Array([
-      cap.accessMode === "read" ? 0x0 : 0x1,
+      cap.accessMode === "read" ? 0x2 : 0x3,
     ]);
 
     const message = concat(
@@ -103,28 +119,84 @@ export function isValidCapOwned<
 
   const prevCap = getPrevCap(cap);
 
-  if (prevCap.delegations.length === 0) {
-    const [area, receiver, sig] = cap.delegations[0];
-
-    const prevArea = getGrantedAreaOwned(prevCap);
-
-    if (!areaIsIncluded(opts.userScheme.order, area, prevArea)) {
-      return Promise.resolve(false);
-    }
-
-    const handover = handoverOwned(opts, prevCap, area, receiver);
-
-    return opts.userScheme.signatureScheme.verify(receiver, sig, handover);
+  if (await isValidCapOwned(opts, prevCap) === false) {
+    return false;
   }
 
-  const [prevArea] = cap.delegations[cap.delegations.length - 2];
-  const [area, receiver, sig] = cap.delegations[cap.delegations.length - 1];
+  const [newArea, newUser, newSignature] =
+    cap.delegations[cap.delegations.length - 1];
 
-  if (!areaIsIncluded(opts.userScheme.order, area, prevArea)) {
+  const prevGrantedArea = getGrantedAreaOwned(prevCap);
+
+  if (
+    areaIsIncluded(opts.userScheme.order, newArea, prevGrantedArea) === false
+  ) {
+    return false;
+  }
+
+  const prevReceiver = getReceiver(prevCap);
+
+  const handover = handoverOwned(opts, prevCap, newArea, newUser);
+
+  return opts.userScheme.signatureScheme.verify(
+    prevReceiver,
+    newSignature,
+    handover,
+  );
+}
+
+export async function isValidCapSubspace<
+  NamespacePublicKey,
+  NamespaceSecretKey,
+  NamespaceSignature,
+  UserPublicKey,
+  UserSecretKey,
+  UserSignature,
+>(
+  opts: {
+    pathScheme: PathScheme;
+    namespaceScheme: KeypairScheme<
+      NamespacePublicKey,
+      NamespaceSecretKey,
+      NamespaceSignature
+    >;
+    userScheme: SubspaceScheme<UserPublicKey, UserSecretKey, UserSignature>;
+  },
+  cap: McSubspaceCapability<
+    NamespacePublicKey,
+    UserPublicKey,
+    NamespaceSignature,
+    UserSignature
+  >,
+): Promise<boolean> {
+  if (cap.delegations.length === 0) {
+    const message = concat(
+      new Uint8Array([0x2]),
+      opts.userScheme.encodingScheme.publicKey.encode(cap.userKey),
+    );
+
+    return opts.namespaceScheme.signatureScheme.verify(
+      cap.namespaceKey,
+      cap.initialAuthorisation,
+      message,
+    );
+  }
+
+  const prevCap = getPrevCapSubspace(cap);
+
+  if (await isValidCapSubspace(opts, prevCap) === false) {
     return Promise.resolve(false);
   }
 
-  const handover = handoverOwned(opts, prevCap, area, receiver);
+  const [newUser, newSignature] = cap.delegations[cap.delegations.length - 1];
 
-  return opts.userScheme.signatureScheme.verify(receiver, sig, handover);
+  const prevReceiver = getReceiverSubspaceCap(prevCap);
+
+  const handover = handoverSubspace(opts, prevCap, newUser);
+
+  return opts.userScheme.signatureScheme.verify(
+    prevReceiver,
+    newSignature,
+    handover,
+  );
 }

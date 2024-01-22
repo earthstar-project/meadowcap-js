@@ -2,9 +2,9 @@ import {
   EncodingScheme,
   KeypairScheme,
   PathScheme,
-  TotalOrder,
+  SubspaceScheme,
 } from "../../deps.ts";
-import { Capability } from "../capabilities/types.ts";
+import { McCapability } from "../capabilities/types.ts";
 
 // Yes. It's a lot.
 export type MeadowcapParams<
@@ -16,7 +16,7 @@ export type MeadowcapParams<
   UserSignature,
   PayloadDigest,
 > = {
-  /** The keypair signature and encoding scheme for namespace key pairs. Used when a namespace is owned.
+  /** The keypair signature and encoding scheme for namespace key pairs. Used for authorisation when a namespace is owned.
    *
    * Must be the same namespace scheme used by Willow.
    */
@@ -26,7 +26,7 @@ export type MeadowcapParams<
     NamespaceSignature
   >;
 
-  /** The keypair signature and encoding scheme for namespace key pairs. Used when a namespace is communal.
+  /** The keypair signature and encoding scheme for namespace key pairs. Used for authorisation when a namespace is communal.
    *
    * Must be the same subspace scheme used by Willow.
    * This will usually be the same as the namespace key pair scheme, but if you use a trivial scheme here then you can effectively remove the notion of subspaces from Willow and Meadowcap.
@@ -39,8 +39,10 @@ export type MeadowcapParams<
 
   pathScheme: PathScheme;
 
+  /** Encoding scheme for the payloads used by Willow's entries. */
   payloadScheme: EncodingScheme<PayloadDigest>;
 
+  /** A function which determines whether a namespace is communal or not via its public key. */
   isCommunal: IsCommunalFn<NamespacePublicKey>;
 };
 
@@ -50,10 +52,7 @@ export type IsCommunalFn<NamespacePublicKey> = (
 ) => boolean;
 
 export type UserScheme<UserPublicKey, UserSecret, UserSignature> =
-  & KeypairScheme<UserPublicKey, UserSecret, UserSignature>
-  & {
-    order: TotalOrder<UserPublicKey>;
-  };
+  SubspaceScheme<UserPublicKey, UserSecret, UserSignature>;
 
 /** To be used as an AuthorizationToken for Willow. */
 export type MeadowcapAuthorisationToken<
@@ -63,12 +62,12 @@ export type MeadowcapAuthorisationToken<
   UserSignature,
 > = {
   /** Certifies that an Entry may be written. */
-  capability: Capability<
+  capability: McCapability<
     NamespacePublicKey,
     UserPublicKey,
     NamespaceSignature,
     UserSignature
   >;
-  /** Proves that the Entry was created by the receiver of the capability. */
+  /** The signature over the encoded entry by the receiver of the corresponding capability. Proves that the Entry was authorised by the receiver of the capability. */
   signature: UserSignature;
 };

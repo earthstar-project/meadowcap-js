@@ -10,18 +10,18 @@ A TypeScript implementation of a capability system for use with the
 Meadowcap specification.**
 
 In Willow, a **namespace** is a self-contained data space with three dimensions:
-time, path, and subspace. A namespace's individual _entries_ belong to points
-within this three dimensional space.
+time, path, and subspace. A namespace's individual _entries_ correspond to
+points within this three dimensional space.
 
 _Meadowcap_ enforces boundaries on who gets to read and write what data in a
-Willow namespace. Read or write access can be bestowed, delegated to others,
-further restricted within a given three dimensional product, or merged together
-into a single capability.
+Willow namespace. Read or write access can be bestowed, delegated to others, or
+further restricted within a given three dimensional area.
 
 These boundaries are mediated by _capabilities_. A capability is an unforgeable
-token bestowing read or write access to some data to a particular person, issued
-by the owner of that data. These capabilities are cryptographically signed and
-verified using generic _signature schemes_ (e.g. ed25519) provided by you.
+token bestowing read or write access for some data to a particular person,
+issued by the owner of that data. These capabilities are cryptographically
+signed and verified using generic _signature schemes_ (e.g. ed25519) provided by
+you.
 
 Meadowcap distinguishes between two types of namespace:
 
@@ -31,7 +31,7 @@ Meadowcap distinguishes between two types of namespace:
   namespace.
 - _Owned namespace_, where authority is derived from the ownership a given
   _namespace_ keypair. This is a top-down model where the owner of the namespace
-  key pair has total control over all data in the namespace, including data
+  keypair has total control over all data in the namespace, including data
   written by those who have had capabilities delegated to them.
 
 Whether a namespace is communal or not is determined by a function provided by
@@ -42,7 +42,7 @@ Meadowcap will switch between using a (provided) subspace signature scheme or a
 namespace signature scheme depending on whether the namespace is communal or
 owned, respectively. Most of the time these schemes will be the same, but you
 can provide a trivial subspace scheme to effectively deactivate Willow's
-subspaces altogether.
+subspaces altogether, for example.
 
 This system is meant to be used in tandem with Willow, and **must** be
 configured to use many of the same parameters (e.g. namespace signature scheme,

@@ -1,348 +1,573 @@
-import { assert } from "$std/assert/assert.ts";
+import { assert, assertEquals, assertRejects } from "$std/assert/mod.ts";
 import {
-  orderNumber,
-  predecessorNumber,
-  successorNumber,
-  TEST_MINIMAL_SUBSPACE_KEY,
-  testHash,
-  testIsCommunalFn,
-  testNamespaceScheme,
-  testPathLengthScheme,
-  testSubspaceScheme,
-} from "../test/util.ts";
+  ANY_SUBSPACE,
+  encodeEntry,
+  Entry,
+  KeypairScheme,
+  OPEN_END,
+  orderBytes,
+} from "../../deps.ts";
+import {
+  getGrantedAreaCommunal,
+  getGrantedAreaOwned,
+  getGrantedNamespace,
+  getReceiver,
+} from "../capabilities/semantics.ts";
 import { Meadowcap } from "./meadowcap.ts";
-import { Entry } from "./types.ts";
+
+function isCommunal(key: ArrayBuffer): boolean {
+  const ui8 = new Uint8Array(key);
+  const last = ui8[64];
+
+  // Check if last bit is 1.
+  return (last & 0x1) === 0x1;
+}
+
+async function makeKeypair() {
+  const { publicKey, privateKey } = await crypto.subtle.generateKey(
+    {
+      name: "ECDSA",
+      namedCurve: "P-256",
+    },
+    true,
+    ["sign", "verify"],
+  );
+
+  return {
+    publicKey: await crypto.subtle.exportKey("raw", publicKey),
+    privateKey,
+  };
+}
+
+async function makeKeypairCommunal() {
+  while (true) {
+    const keypair = await makeKeypair();
+
+    if (isCommunal(keypair.publicKey)) {
+      return keypair;
+    }
+  }
+}
+
+async function makeKeypairOwned() {
+  while (true) {
+    const keypair = await makeKeypair();
+
+    if (!isCommunal(keypair.publicKey)) {
+      return keypair;
+    }
+  }
+}
+
+const ecdsaScheme: KeypairScheme<ArrayBuffer, CryptoKey, ArrayBuffer> = {
+  encodingScheme: {
+    publicKey: {
+      encode: (key) => new Uint8Array(key),
+      decode: (key) => key.buffer,
+      encodedLength: () => 65,
+    },
+    signature: {
+      encode: (sig: ArrayBuffer) => new Uint8Array(sig),
+      decode: (enc: Uint8Array) => enc.buffer,
+      encodedLength: () => 64,
+    },
+  },
+  signatureScheme: {
+    sign: (secretKey: CryptoKey, bytestring: Uint8Array) => {
+      return crypto.subtle.sign(
+        {
+          name: "ECDSA",
+          hash: { name: "SHA-256" },
+        },
+        secretKey,
+        bytestring,
+      );
+    },
+    verify: async (
+      publicKey: ArrayBuffer,
+      signature: ArrayBuffer,
+      bytestring: Uint8Array,
+    ) => {
+      const publicKeyWeb = await crypto.subtle.importKey(
+        "raw",
+        publicKey,
+        {
+          name: "ECDSA",
+          namedCurve: "P-256",
+        },
+        true,
+        ["verify"],
+      );
+
+      return crypto.subtle.verify(
+        {
+          name: "ECDSA",
+          hash: { name: "SHA-256" },
+        },
+        publicKeyWeb,
+        signature,
+        bytestring,
+      );
+    },
+  },
+};
+
+function getTestMc() {
+  return new Meadowcap<
+    ArrayBuffer,
+    CryptoKey,
+    ArrayBuffer,
+    ArrayBuffer,
+    CryptoKey,
+    ArrayBuffer,
+    ArrayBuffer
+  >({
+    namespaceKeypairScheme: ecdsaScheme,
+    userScheme: {
+      ...ecdsaScheme,
+      order: (a, b) => {
+        return orderBytes(new Uint8Array(a), new Uint8Array(b));
+      },
+    },
+    isCommunal,
+    pathScheme: {
+      maxComponentCount: 3,
+      maxComponentLength: 4,
+      maxPathLength: 10,
+    },
+    payloadScheme: {
+      encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
+      decode: (enc: Uint8Array) => enc.buffer,
+      encodedLength: () => 32,
+    },
+  });
+}
+
+Deno.test("createCapCommunal", async () => {
+  const mc = getTestMc();
+
+  const namespaceKeypair = await makeKeypairCommunal();
+
+  const userKeypair = await makeKeypair();
+
+  // Makes a valid cap.
+  const communalCap = mc.createCapCommunal({
+    accessMode: "read",
+    namespace: namespaceKeypair.publicKey,
+    user: userKeypair.publicKey,
+  });
+
+  assert(await mc.isValidCap(communalCap));
+
+  assertEquals(getGrantedNamespace(communalCap), namespaceKeypair.publicKey);
+  assertEquals(getReceiver(communalCap), userKeypair.publicKey);
+  assertEquals(getGrantedAreaCommunal(communalCap), {
+    pathPrefix: [],
+    timeRange: {
+      start: BigInt(0),
+      end: OPEN_END,
+    },
+    includedSubspaceId: userKeypair.publicKey,
+  });
+});
+
+Deno.test("createCapOwned", async () => {
+  const mc = getTestMc();
+
+  const namespaceKeypair = await makeKeypairOwned();
+
+  const userKeypair = await makeKeypair();
+
+  // Makes a valid cap.
+  const ownedCap = await mc.createCapOwned({
+    accessMode: "read",
+    namespace: namespaceKeypair.publicKey,
+    namespaceSecret: namespaceKeypair.privateKey,
+    user: userKeypair.publicKey,
+  });
+
+  assert(await mc.isValidCap(ownedCap));
+
+  assertEquals(getGrantedNamespace(ownedCap), namespaceKeypair.publicKey);
+  assertEquals(getReceiver(ownedCap), userKeypair.publicKey);
+  assertEquals(getGrantedAreaOwned(ownedCap), {
+    pathPrefix: [],
+    timeRange: {
+      start: BigInt(0),
+      end: OPEN_END,
+    },
+    includedSubspaceId: ANY_SUBSPACE,
+  });
+});
+
+Deno.test("delegateCap (communal)", async () => {
+  const mc = getTestMc();
+
+  const namespaceKeypair = await makeKeypairCommunal();
+
+  const userKeypair = await makeKeypair();
+
+  // Makes a valid cap.
+  const communalCap = mc.createCapCommunal({
+    accessMode: "read",
+    namespace: namespaceKeypair.publicKey,
+    user: userKeypair.publicKey,
+  });
+
+  // Delegate it!
+
+  const delegeeKeypair = await makeKeypair();
+
+  const delegatedCap = await mc.delegateCap({
+    cap: communalCap,
+    user: delegeeKeypair.publicKey,
+    secret: userKeypair.privateKey,
+    area: {
+      pathPrefix: [new Uint8Array([1, 1, 1, 1])],
+      timeRange: {
+        start: BigInt(1000),
+        end: BigInt(2000),
+      },
+      includedSubspaceId: userKeypair.publicKey,
+    },
+  });
+
+  assert(mc.isValidCap(delegatedCap));
+
+  assertEquals(getGrantedNamespace(delegatedCap), namespaceKeypair.publicKey);
+  assertEquals(getReceiver(delegatedCap), delegeeKeypair.publicKey);
+  assertEquals(getGrantedAreaCommunal(delegatedCap), {
+    pathPrefix: [new Uint8Array([1, 1, 1, 1])],
+    timeRange: {
+      start: BigInt(1000),
+      end: BigInt(2000),
+    },
+    includedSubspaceId: userKeypair.publicKey,
+  });
+
+  // Delegate it, again!
+
+  const delegee2Keypair = await makeKeypair();
+
+  const delegated2Cap = await mc.delegateCap({
+    cap: delegatedCap,
+    user: delegee2Keypair.publicKey,
+    secret: delegeeKeypair.privateKey,
+    area: {
+      pathPrefix: [new Uint8Array([1, 1, 1, 1]), new Uint8Array([0])],
+      timeRange: {
+        start: BigInt(1200),
+        end: BigInt(1800),
+      },
+      includedSubspaceId: userKeypair.publicKey,
+    },
+  });
+
+  assert(mc.isValidCap(delegated2Cap));
+
+  assertEquals(getGrantedNamespace(delegated2Cap), namespaceKeypair.publicKey);
+  assertEquals(getReceiver(delegated2Cap), delegee2Keypair.publicKey);
+  assertEquals(getGrantedAreaCommunal(delegated2Cap), {
+    pathPrefix: [new Uint8Array([1, 1, 1, 1]), new Uint8Array([0])],
+    timeRange: {
+      start: BigInt(1200),
+      end: BigInt(1800),
+    },
+    includedSubspaceId: userKeypair.publicKey,
+  });
+
+  const delegee3Keypair = await makeKeypair();
+
+  // test that delegating area outside granted area throws.
+  assertRejects(async () => {
+    await mc.delegateCap({
+      cap: delegatedCap,
+      user: delegee3Keypair.publicKey,
+      secret: delegee2Keypair.privateKey,
+      area: {
+        pathPrefix: [new Uint8Array([1, 1, 1, 1]), new Uint8Array([1])],
+        timeRange: {
+          start: BigInt(0),
+          end: BigInt(3000),
+        },
+        includedSubspaceId: userKeypair.publicKey,
+      },
+    });
+  });
+
+  // test that signing with the wrong secret throws.
+
+  const invalidCap = await mc.delegateCap({
+    cap: delegatedCap,
+    user: delegee3Keypair.publicKey,
+    // Wrong secret.
+    secret: userKeypair.privateKey,
+    area: {
+      pathPrefix: [new Uint8Array([1, 1, 1, 1]), new Uint8Array([1])],
+      timeRange: {
+        start: BigInt(1200),
+        end: BigInt(1800),
+      },
+      includedSubspaceId: userKeypair.publicKey,
+    },
+  });
+
+  assert(!await mc.isValidCap(invalidCap));
+});
+
+Deno.test("delegateCap (owned)", async () => {
+  const mc = getTestMc();
+
+  const namespaceKeypair = await makeKeypairOwned();
+
+  const userKeypair = await makeKeypair();
+
+  // Makes a valid cap.
+  const ownedKeypair = await mc.createCapOwned({
+    accessMode: "read",
+    namespace: namespaceKeypair.publicKey,
+    namespaceSecret: namespaceKeypair.privateKey,
+    user: userKeypair.publicKey,
+  });
+
+  // Delegate it!
+
+  const delegeeKeypair = await makeKeypair();
+
+  const delegatedCap = await mc.delegateCap({
+    cap: ownedKeypair,
+    user: delegeeKeypair.publicKey,
+    secret: userKeypair.privateKey,
+    area: {
+      pathPrefix: [new Uint8Array([1, 1, 1, 1])],
+      timeRange: {
+        start: BigInt(1000),
+        end: BigInt(2000),
+      },
+      includedSubspaceId: ANY_SUBSPACE,
+    },
+  });
+
+  assert(mc.isValidCap(delegatedCap));
+
+  assertEquals(getGrantedNamespace(delegatedCap), namespaceKeypair.publicKey);
+  assertEquals(getReceiver(delegatedCap), delegeeKeypair.publicKey);
+  assertEquals(getGrantedAreaCommunal(delegatedCap), {
+    pathPrefix: [new Uint8Array([1, 1, 1, 1])],
+    timeRange: {
+      start: BigInt(1000),
+      end: BigInt(2000),
+    },
+    includedSubspaceId: ANY_SUBSPACE,
+  });
+
+  // Delegate it, again!
+
+  const delegee2Keypair = await makeKeypair();
+
+  const delegated2Cap = await mc.delegateCap({
+    cap: delegatedCap,
+    user: delegee2Keypair.publicKey,
+    secret: delegeeKeypair.privateKey,
+    area: {
+      pathPrefix: [new Uint8Array([1, 1, 1, 1]), new Uint8Array([0])],
+      timeRange: {
+        start: BigInt(1200),
+        end: BigInt(1800),
+      },
+      includedSubspaceId: delegeeKeypair.publicKey,
+    },
+  });
+
+  assert(mc.isValidCap(delegated2Cap));
+
+  assertEquals(getGrantedNamespace(delegated2Cap), namespaceKeypair.publicKey);
+  assertEquals(getReceiver(delegated2Cap), delegee2Keypair.publicKey);
+  assertEquals(getGrantedAreaCommunal(delegated2Cap), {
+    pathPrefix: [new Uint8Array([1, 1, 1, 1]), new Uint8Array([0])],
+    timeRange: {
+      start: BigInt(1200),
+      end: BigInt(1800),
+    },
+    includedSubspaceId: delegeeKeypair.publicKey,
+  });
+
+  const delegee3Keypair = await makeKeypair();
+
+  // test that delegating area outside granted area throws.
+  assertRejects(async () => {
+    await mc.delegateCap({
+      cap: delegatedCap,
+      user: delegee3Keypair.publicKey,
+      secret: delegee2Keypair.privateKey,
+      area: {
+        pathPrefix: [new Uint8Array([1, 1, 1, 1]), new Uint8Array([1])],
+        timeRange: {
+          start: BigInt(0),
+          end: BigInt(3000),
+        },
+        includedSubspaceId: delegee3Keypair.publicKey,
+      },
+    });
+  });
+
+  // test that signing with the wrong secret produces invalid cap.
+
+  const invalidCap = await mc.delegateCap({
+    cap: delegatedCap,
+    user: delegee3Keypair.publicKey,
+    // Wrong secret.
+    secret: userKeypair.privateKey,
+    area: {
+      pathPrefix: [new Uint8Array([1, 1, 1, 1]), new Uint8Array([1])],
+      timeRange: {
+        start: BigInt(1200),
+        end: BigInt(1800),
+      },
+      includedSubspaceId: delegee3Keypair.publicKey,
+    },
+  });
+
+  assert(!await mc.isValidCap(invalidCap));
+});
 
 Deno.test("isAuthorisedWrite", async () => {
-  const meadowcap = new Meadowcap({
-    namespaceKeypairScheme: testNamespaceScheme,
-    subspaceKeypairScheme: testSubspaceScheme,
-    isCommunalFn: testIsCommunalFn,
-    minimalSubspacePublicKey: TEST_MINIMAL_SUBSPACE_KEY,
-    orderSubspace: orderNumber,
-    predecessorSubspace: predecessorNumber,
-    successorSubspace: successorNumber,
-    isInclusiveSmallerSubspace: () => false,
-    pathLengthScheme: testPathLengthScheme,
-    hashCapability: testHash,
-    encodePayloadHash: (hash: Uint8Array) => hash,
+  const mc = getTestMc();
+
+  const namespaceKeypair = await makeKeypairCommunal();
+  const userKeypair = await makeKeypair();
+
+  const sourceCapCommunal = mc.createCapCommunal({
+    accessMode: "write",
+    namespace: namespaceKeypair.publicKey,
+    user: userKeypair.publicKey,
   });
 
-  // Owned namespace - source cap test
+  // An authorised write
 
-  const namespaceKeypair = {
-    publicKey: 128,
-    secretKey: 128,
-  };
+  {
+    const payload = new TextEncoder().encode("Hello");
 
-  const sourceCap = meadowcap.createSourceCap(
-    "write",
-    namespaceKeypair.publicKey,
-    0,
-  );
+    const entry: Entry<ArrayBuffer, ArrayBuffer, ArrayBuffer> = {
+      namespaceId: namespaceKeypair.publicKey,
+      subspaceId: userKeypair.publicKey,
+      path: [],
+      payloadLength: BigInt(payload.byteLength),
+      payloadDigest: await crypto.subtle.digest("SHA-256", payload),
+      timestamp: BigInt(0),
+    };
 
-  const entry: Entry<number, number, Uint8Array> = {
-    identifier: {
-      namespace: namespaceKeypair.publicKey,
-      subspace: 0,
-      path: new Uint8Array([0, 1, 2, 3]),
-    },
-    record: {
-      hash: new Uint8Array([1, 1]),
-      length: BigInt(2),
-      timestamp: BigInt(1000),
-    },
-  };
+    const encodedEntry = encodeEntry({
+      namespaceScheme: ecdsaScheme.encodingScheme.publicKey,
+      subspaceScheme: ecdsaScheme.encodingScheme.publicKey,
+      pathScheme: {
+        maxComponentCount: 3,
+        maxComponentLength: 4,
+        maxPathLength: 10,
+      },
+      payloadScheme: {
+        encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
+        decode: (enc: Uint8Array) => enc.buffer,
+        encodedLength: () => 32,
+      },
+    }, entry);
 
-  const token = await meadowcap.createAuthorisationToken(
-    entry,
-    sourceCap,
-    namespaceKeypair.secretKey,
-  );
-
-  const isAuthorised = await meadowcap.isAuthorisedWrite(entry, token);
-
-  assert(isAuthorised);
-
-  // Owned namespace - wrong keypair
-
-  const otherKeypair = {
-    publicKey: 130,
-    secretKey: 130,
-  };
-
-  const badToken = await meadowcap.createAuthorisationToken(
-    entry,
-    sourceCap,
-    otherKeypair.secretKey,
-  );
-
-  const isBadAuthorised = await meadowcap.isAuthorisedWrite(entry, badToken);
-
-  assert(!isBadAuthorised);
-
-  // Owned namespace - restricted (entry not included)
-
-  const subspace1Product = meadowcap.addSingleValueToProduct({
-    subspace: 1,
-  });
-
-  const restrictionCap = meadowcap.createRestrictionCap(
-    sourceCap,
-    subspace1Product,
-  );
-
-  const restrictionToken = await meadowcap.createAuthorisationToken(
-    entry,
-    restrictionCap,
-    namespaceKeypair.secretKey,
-  );
-
-  const isRestrictedAuthorised = await meadowcap.isAuthorisedWrite(
-    entry,
-    restrictionToken,
-  );
-
-  assert(!isRestrictedAuthorised);
-
-  // Owned namespace - restricted (entry included)
-
-  let pathProduct = meadowcap.addSingleValueToProduct({
-    path: new Uint8Array([0, 1, 2, 3]),
-  });
-
-  pathProduct = meadowcap.addOpenRangeToProduct(
-    { subspace: 0 },
-    pathProduct,
-  );
-  pathProduct = meadowcap.addOpenRangeToProduct(
-    { time: BigInt(0) },
-    pathProduct,
-  );
-
-  const restrictionGoodCap = meadowcap.createRestrictionCap(
-    sourceCap,
-    pathProduct,
-  );
-
-  const restrictionGoodToken = await meadowcap.createAuthorisationToken(
-    entry,
-    restrictionGoodCap,
-    namespaceKeypair.secretKey,
-  );
-
-  const isRestrictedGoodAuthorised = await meadowcap.isAuthorisedWrite(
-    entry,
-    restrictionGoodToken,
-  );
-
-  assert(isRestrictedGoodAuthorised);
-
-  // Owned namespace - delegated
-
-  const delegeeKeypair = { publicKey: 255, privateKey: 255 };
-
-  const delegated = await meadowcap.createDelegateCapOwned(
-    sourceCap,
-    delegeeKeypair.publicKey,
-    namespaceKeypair.secretKey,
-  );
-
-  const delegatedToken = await meadowcap.createAuthorisationToken(
-    entry,
-    delegated,
-    delegeeKeypair.privateKey,
-  );
-
-  const isDelegatedAuthorised = await meadowcap.isAuthorisedWrite(
-    entry,
-    delegatedToken,
-  );
-
-  assert(isDelegatedAuthorised);
-
-  // Owned namespace - delegated (wrong key)
-
-  const delegatedBadToken = await meadowcap.createAuthorisationToken(
-    entry,
-    delegated,
-    // Used a different key to sign!
-    otherKeypair.secretKey,
-  );
-
-  const isBadDelegatedAuthorised = await meadowcap.isAuthorisedWrite(
-    entry,
-    delegatedBadToken,
-  );
-
-  assert(!isBadDelegatedAuthorised);
-
-  // Communal namespace - source cap
-
-  const communalNamespaceKeypair = {
-    publicKey: 0,
-    secretKey: 0,
-  };
-
-  const subspaceKeypair = {
-    publicKey: 255,
-    secretKey: 255,
-  };
-
-  const communalSourceCap = meadowcap.createSourceCap(
-    "write",
-    subspaceKeypair.publicKey,
-    0,
-  );
-
-  const communalEntry: Entry<number, number, Uint8Array> = {
-    identifier: {
-      namespace: communalNamespaceKeypair.publicKey,
-      subspace: 255,
-      path: new Uint8Array([0, 1, 2, 3]),
-    },
-    record: {
-      hash: new Uint8Array([1, 1]),
-      length: BigInt(2),
-      timestamp: BigInt(1000),
-    },
-  };
-
-  const communalToken = await meadowcap.createAuthorisationToken(
-    communalEntry,
-    communalSourceCap,
-    subspaceKeypair.secretKey,
-  );
-
-  const isCommunalAuthorised = await meadowcap.isAuthorisedWrite(
-    communalEntry,
-    communalToken,
-  );
-
-  assert(isCommunalAuthorised);
-
-  // Communal namespace - wrong keypair
-
-  const otherSubspaceKeypair = {
-    publicKey: 254,
-    secretKey: 254,
-  };
-
-  const badCommunalToken = await meadowcap.createAuthorisationToken(
-    communalEntry,
-    communalSourceCap,
-    otherSubspaceKeypair.secretKey,
-  );
-
-  const isCommunalBadAuthorised = await meadowcap.isAuthorisedWrite(
-    entry,
-    badCommunalToken,
-  );
-
-  assert(!isCommunalBadAuthorised);
-
-  // Communal namespace - restricted (entry not included)
-
-  let path01Product = meadowcap.addSingleValueToProduct({
-    path: new Uint8Array([0, 1]),
-  });
-
-  path01Product = meadowcap.addSingleValueToProduct({
-    subspace: 0,
-  }, path01Product);
-
-  path01Product = meadowcap.addOpenRangeToProduct({
-    time: BigInt(0),
-  }, path01Product);
-
-  const restrictionCommunalCap = meadowcap.createRestrictionCap(
-    communalSourceCap,
-    path01Product,
-  );
-
-  const restrictionCommunalToken = await meadowcap.createAuthorisationToken(
-    communalEntry,
-    restrictionCommunalCap,
-    subspaceKeypair.secretKey,
-  );
-
-  const isRestrictedCommunalAuthorised = await meadowcap.isAuthorisedWrite(
-    communalEntry,
-    restrictionCommunalToken,
-  );
-
-  assert(!isRestrictedCommunalAuthorised);
-
-  // Communal namespace - restricted (entry included)
-
-  let time1000Product = meadowcap.addSingleValueToProduct({
-    time: BigInt(1000),
-  });
-
-  time1000Product = meadowcap.addSingleValueToProduct({
-    subspace: 255,
-  }, time1000Product);
-
-  time1000Product = meadowcap.addOpenRangeToProduct({
-    path: new Uint8Array(),
-  }, time1000Product);
-
-  const restrictionIncludedCommunalCap = meadowcap.createRestrictionCap(
-    communalSourceCap,
-    time1000Product,
-  );
-
-  const restrictionIncludedCommunalToken = await meadowcap
-    .createAuthorisationToken(
-      communalEntry,
-      restrictionIncludedCommunalCap,
-      subspaceKeypair.secretKey,
+    const signature = await ecdsaScheme.signatureScheme.sign(
+      userKeypair.privateKey,
+      encodedEntry,
     );
 
-  const isRestrictedIncludedCommunalAuthorised = await meadowcap
-    .isAuthorisedWrite(
-      communalEntry,
-      restrictionIncludedCommunalToken,
+    assert(
+      await mc.isAuthorisedWrite({
+        capability: sourceCapCommunal,
+        signature,
+      }, entry),
+    );
+  }
+
+  // Attempt write outside the granted area
+  {
+    const userKeypair2 = await makeKeypair();
+
+    const payload = new TextEncoder().encode("Heehee");
+
+    const entry: Entry<ArrayBuffer, ArrayBuffer, ArrayBuffer> = {
+      namespaceId: namespaceKeypair.publicKey,
+      subspaceId: userKeypair2.publicKey,
+      path: [],
+      payloadLength: BigInt(payload.byteLength),
+      payloadDigest: await crypto.subtle.digest("SHA-256", payload),
+      timestamp: BigInt(0),
+    };
+
+    const encodedEntry = encodeEntry({
+      namespaceScheme: ecdsaScheme.encodingScheme.publicKey,
+      subspaceScheme: ecdsaScheme.encodingScheme.publicKey,
+      pathScheme: {
+        maxComponentCount: 3,
+        maxComponentLength: 4,
+        maxPathLength: 10,
+      },
+      payloadScheme: {
+        encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
+        decode: (enc: Uint8Array) => enc.buffer,
+        encodedLength: () => 32,
+      },
+    }, entry);
+
+    const signature = await ecdsaScheme.signatureScheme.sign(
+      userKeypair.privateKey,
+      encodedEntry,
     );
 
-  assert(isRestrictedIncludedCommunalAuthorised);
+    assert(
+      await mc.isAuthorisedWrite({
+        capability: sourceCapCommunal,
+        signature,
+      }, entry) === false,
+    );
+  }
 
-  // Communal namespace - delegated
+  // Signed with public key other than capability's
+  {
+    const userKeypair2 = await makeKeypair();
 
-  const communalDelegeeKeypair = { publicKey: 253, privateKey: 253 };
+    const payload = new TextEncoder().encode("Mohoho");
 
-  const communalDelegated = await meadowcap.createDelegateCapOwned(
-    communalSourceCap,
-    communalDelegeeKeypair.publicKey,
-    subspaceKeypair.secretKey,
-  );
+    const entry: Entry<ArrayBuffer, ArrayBuffer, ArrayBuffer> = {
+      namespaceId: namespaceKeypair.publicKey,
+      subspaceId: userKeypair.publicKey,
+      path: [],
+      payloadLength: BigInt(payload.byteLength),
+      payloadDigest: await crypto.subtle.digest("SHA-256", payload),
+      timestamp: BigInt(0),
+    };
 
-  const communalDelegatedToken = await meadowcap.createAuthorisationToken(
-    entry,
-    communalDelegated,
-    communalDelegeeKeypair.privateKey,
-  );
+    const encodedEntry = encodeEntry({
+      namespaceScheme: ecdsaScheme.encodingScheme.publicKey,
+      subspaceScheme: ecdsaScheme.encodingScheme.publicKey,
+      pathScheme: {
+        maxComponentCount: 3,
+        maxComponentLength: 4,
+        maxPathLength: 10,
+      },
+      payloadScheme: {
+        encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
+        decode: (enc: Uint8Array) => enc.buffer,
+        encodedLength: () => 32,
+      },
+    }, entry);
 
-  const isCommunalDelegatedAuthorised = await meadowcap.isAuthorisedWrite(
-    entry,
-    communalDelegatedToken,
-  );
+    const signature = await ecdsaScheme.signatureScheme.sign(
+      userKeypair2.privateKey,
+      encodedEntry,
+    );
 
-  assert(isCommunalDelegatedAuthorised);
-
-  // Communal namespace - delegated (wrong key)
-
-  const communalDelegatedBadToken = await meadowcap.createAuthorisationToken(
-    entry,
-    delegated,
-    // Used a different key to sign!
-    otherSubspaceKeypair.secretKey,
-  );
-
-  const isCommunalBadDelegatedAuthorised = await meadowcap.isAuthorisedWrite(
-    entry,
-    communalDelegatedBadToken,
-  );
-
-  assert(!isCommunalBadDelegatedAuthorised);
+    assert(
+      await mc.isAuthorisedWrite({
+        capability: sourceCapCommunal,
+        signature,
+      }, entry) === false,
+    );
+  }
 });

@@ -1,15 +1,19 @@
 import { Area } from "../../deps.ts";
 
-/** The type of access a capability grants. */
+/** Whether a capability grants read or write access. */
 export type AccessMode = "read" | "write";
 
+/** A successive authorisation of a new `UserPublicKey`, restricted to a particular `Area`. */
 export type Delegation<UserPublicKey, UserSignature> = [
   Area<UserPublicKey>,
   UserPublicKey,
   UserSignature,
 ];
 
-/** A capability that implements communal namespaces. */
+/** A capability that implements communal namespaces.
+ *
+ * https://willowprotocol.org/specs/meadowcap/index.html#communal_capabilities
+ */
 export type CommunalCapability<
   NamespacePublicKey,
   UserPublicKey,
@@ -21,11 +25,14 @@ export type CommunalCapability<
   namespaceKey: NamespacePublicKey;
   /** The subspace for which and to whom this capability grants access. */
   userKey: UserPublicKey;
-  /** Successive authorizations of new UserPublicKeys, each restricted to a particular Area. */
+  /** Successive authorisations of new UserPublicKeys, each restricted to a particular Area. */
   delegations: Delegation<UserPublicKey, UserSignature>[];
 };
 
-/** A capability that implements owned namespaces. */
+/** A capability that implements owned namespaces.
+ *
+ * https://willowprotocol.org/specs/meadowcap/index.html#owned_capabilities
+ */
 export type OwnedCapability<
   NamespacePublicKey,
   UserPublicKey,
@@ -38,14 +45,17 @@ export type OwnedCapability<
   namespaceKey: NamespacePublicKey;
   /** The user to whom this grants access; granting access for the full namespace_key, not just to a subspace. */
   userKey: UserPublicKey;
-  /** Authorization of the user_key by the owned_namespace_key. */
+  /** Authorisation of the user_key by the owned_namespace_key. */
   initialAuthorisation: NamespaceSignature;
   /** Successive authorizations of new UserPublicKeys, each restricted to a particular Area. */
   delegations: Delegation<UserPublicKey, UserSignature>[];
 };
 
-/** A Meadowcap capability */
-export type Capability<
+/** A Meadowcap capability.
+ *
+ * https://willowprotocol.org/specs/meadowcap/index.html#proper_capabilities
+ */
+export type McCapability<
   NamespacePublicKey,
   UserPublicKey,
   NamespaceSignature,
@@ -62,3 +72,23 @@ export type Capability<
     NamespaceSignature,
     UserSignature
   >;
+
+/** A capability that certifies read access to arbitrary SubspaceIds at some unspecified Path.
+ *
+ * https://willowprotocol.org/specs/pai/index.html#McSubspaceCapability
+ */
+export type McSubspaceCapability<
+  NamespacePublicKey,
+  UserPublicKey,
+  NamespaceSignature,
+  UserSignature,
+> = {
+  /** The namespace for which this grants access. */
+  namespaceKey: NamespacePublicKey;
+  /** The user to whom this grants access; granting access for the full namespace_key, not just to a subspace. */
+  userKey: UserPublicKey;
+  /** Authorisation of the user_key by the owned_namespace_key. */
+  initialAuthorisation: NamespaceSignature;
+  /** Successive authorisations of new UserPublicKeys, [each restricted to a particular Area. */
+  delegations: [UserPublicKey, UserSignature][];
+};

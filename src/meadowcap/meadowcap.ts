@@ -1,5 +1,6 @@
 import {
   Area,
+  areaIsIncluded,
   concat,
   encodeEntry,
   Entry,
@@ -14,23 +15,45 @@ import {
 } from "../capabilities/semantics.ts";
 import {
   AccessMode,
-  Capability,
   CommunalCapability,
+  McCapability,
   OwnedCapability,
 } from "../capabilities/types.ts";
 import {
   isValidCapCommunal,
   isValidCapOwned,
 } from "../capabilities/validity.ts";
+import { InvalidCapError, MeadowcapError } from "./errors.ts";
 
 import { MeadowcapAuthorisationToken, MeadowcapParams } from "./types.ts";
 
+/** Represents a configured instantiation of [Meadowcap](https://willowprotocol.org/specs/meadowcap), used for the creation, delegation, and validation of capabilities, and more.
+ *
+ * Example:
+ *
+ *  ```js
+ *  const mc = new Meadowcap(params);
+ *
+ *  const communalCap = mc.createCapCommunal({
+ *    accessMode: "read",
+ *    namespace: namespaceKey,
+ *    user: userPublicKey
+ *  });
+ *
+ *  const delegatedCap = mc.delegateCap({
+ *    cap: communalCap,
+ *    user: delegeePublicKey,
+ *    area: smallerArea,
+ *    secret: userSecretKey
+ *  });
+ *  ```
+ */
 export class Meadowcap<
   NamespacePublicKey,
-  UserPublicKey,
   NamespaceSecretKey,
-  UserSecretKey,
   NamespaceSignature,
+  UserPublicKey,
+  UserSecretKey,
   UserSignature,
   PayloadDigest,
 > {
@@ -46,7 +69,8 @@ export class Meadowcap<
     >,
   ) {}
 
-  createCommunalCap(
+  /** Create a capability for a communal namespace. */
+  createCapCommunal(
     { accessMode, namespace, user }: {
       accessMode: AccessMode;
       namespace: NamespacePublicKey;
@@ -57,6 +81,12 @@ export class Meadowcap<
     UserPublicKey,
     UserSignature
   > {
+    if (!this.params.isCommunal(namespace)) {
+      throw new MeadowcapError(
+        "Tried to create a communal cap from an owned namespace",
+      );
+    }
+
     return {
       accessMode,
       namespaceKey: namespace,
@@ -65,7 +95,8 @@ export class Meadowcap<
     };
   }
 
-  async createOwnedCap({ accessMode, namespace, namespaceSecret, user }: {
+  /** Create a capability for an owned namespace. */
+  async createCapOwned({ accessMode, namespace, namespaceSecret, user }: {
     accessMode: AccessMode;
     namespace: NamespacePublicKey;
     namespaceSecret: NamespaceSecretKey;
@@ -78,7 +109,13 @@ export class Meadowcap<
       UserSignature
     >
   > {
-    const accessModeByte = new Uint8Array([accessMode === "read" ? 0x0 : 0x1]);
+    if (this.params.isCommunal(namespace)) {
+      throw new MeadowcapError(
+        "Tried to create an owned cap from a communal namespace",
+      );
+    }
+
+    const accessModeByte = new Uint8Array([accessMode === "read" ? 0x2 : 0x3]);
 
     const message = concat(
       accessModeByte,
@@ -100,6 +137,7 @@ export class Meadowcap<
     };
   }
 
+  /** Delegate a capability to a `UserPublicKey`, restricted to a given `Area`. */
   async delegateCap(
     { cap, user, area, secret }: {
       cap: CommunalCapability<
@@ -107,7 +145,6 @@ export class Meadowcap<
         UserPublicKey,
         UserSignature
       >;
-
       user: UserPublicKey;
       area: Area<UserPublicKey>;
       /** The secret of this capabality's receiver. */
@@ -161,7 +198,7 @@ export class Meadowcap<
       secret: UserSecretKey;
     },
   ): Promise<
-    Capability<
+    McCapability<
       NamespacePublicKey,
       UserPublicKey,
       NamespaceSignature,
@@ -169,6 +206,18 @@ export class Meadowcap<
     >
   > {
     if ("initialAuthorisation" in cap === false) {
+      if (
+        !areaIsIncluded(
+          this.params.userScheme.order,
+          area,
+          getGrantedAreaCommunal(cap),
+        )
+      ) {
+        throw new MeadowcapError(
+          "Tried to grant access to an area outside the capability's granted area.",
+        );
+      }
+
       const handover = handoverCommunal(
         {
           namespaceScheme: this.params.namespaceKeypairScheme,
@@ -189,6 +238,18 @@ export class Meadowcap<
         ...cap,
         delegations: [...cap.delegations, [area, user, signature]],
       };
+    }
+
+    if (
+      !areaIsIncluded(
+        this.params.userScheme.order,
+        area,
+        getGrantedAreaOwned(cap),
+      )
+    ) {
+      throw new MeadowcapError(
+        "Tried to grant access to an area outside the capability's granted area.",
+      );
     }
 
     const handover = handoverOwned(
@@ -213,8 +274,9 @@ export class Meadowcap<
     };
   }
 
+  /** Returns whether a capability is valid or not. */
   isValidCap(
-    cap: Capability<
+    cap: McCapability<
       NamespacePublicKey,
       UserPublicKey,
       NamespaceSignature,
@@ -236,25 +298,29 @@ export class Meadowcap<
     }, cap);
   }
 
+  /** Returns whether a valid capability is for a communal namespace or not. */
   isCommunal(
-    cap: Capability<
+    cap: McCapability<
       NamespacePublicKey,
       UserPublicKey,
       NamespaceSignature,
       UserSignature
     >,
-  ): boolean {
+  ): boolean | InvalidCapError {
     const isCommunal = this.params.isCommunal(cap.namespaceKey);
 
     if ("initialAuthorisation" in cap && isCommunal) {
-      throw new Error("OwnedCapability for to a communal namespace ");
+      return new InvalidCapError(
+        "OwnedCapability assigned to a communal namespace ",
+      );
     }
 
     return isCommunal;
   }
 
+  /** Returns the receiver of a valid capability. */
   getCapReceiver(
-    cap: Capability<
+    cap: McCapability<
       NamespacePublicKey,
       UserPublicKey,
       NamespaceSignature,
@@ -264,8 +330,9 @@ export class Meadowcap<
     return getReceiver(cap);
   }
 
+  /** Returns the granted `Area` for a valid capability. */
   getCapGrantedArea(
-    cap: Capability<
+    cap: McCapability<
       NamespacePublicKey,
       UserPublicKey,
       NamespaceSignature,
@@ -279,6 +346,7 @@ export class Meadowcap<
     return getGrantedAreaCommunal(cap);
   }
 
+  /** Returns whether a `MeadowcapAuthorisationToken` is permitted to write a given entry.  */
   async isAuthorisedWrite(
     token: MeadowcapAuthorisationToken<
       NamespacePublicKey,
@@ -303,7 +371,7 @@ export class Meadowcap<
       return false;
     }
 
-    // Finally, verify.
+    // Finally, verify the authorisation token signature
     const receiver = this.getCapReceiver(token.capability);
 
     const encodedEntry = encodeEntry({

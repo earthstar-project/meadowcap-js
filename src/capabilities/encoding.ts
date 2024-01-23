@@ -1,5 +1,9 @@
-import { CommunalCapability, OwnedCapability } from "./types.ts";
-import { getGrantedAreaCommunal } from "./semantics.ts";
+import {
+  CommunalCapability,
+  McSubspaceCapability,
+  OwnedCapability,
+} from "./types.ts";
+import { getGrantedAreaCommunal, getGrantedAreaOwned } from "./semantics.ts";
 import {
   Area,
   concat,
@@ -9,6 +13,7 @@ import {
 } from "../../deps.ts";
 import { UserScheme } from "../meadowcap/types.ts";
 
+/** Returns the handover message to be signed when issuing a delegation for a communal capability. */
 export function handoverCommunal<
   NamespacePublicKey,
   NamespaceSecretKey,
@@ -41,7 +46,7 @@ export function handoverCommunal<
     const areaInArea = encodeAreaInArea(
       {
         pathScheme: opts.pathScheme,
-        subspaceScheme: opts.userScheme.encodingScheme.publicKey,
+        subspaceIdEncodingScheme: opts.userScheme.encodingScheme.publicKey,
         orderSubspace: opts.userScheme.order,
       },
       newArea,
@@ -58,13 +63,14 @@ export function handoverCommunal<
     );
   }
 
-  const [prevArea, , prevSig] =
-    prevCap.delegations[prevCap.delegations.length - 1];
+  const [, , prevSig] = prevCap.delegations[prevCap.delegations.length - 1];
+
+  const prevArea = getGrantedAreaCommunal(prevCap);
 
   const areaInArea = encodeAreaInArea(
     {
       pathScheme: opts.pathScheme,
-      subspaceScheme: opts.userScheme.encodingScheme.publicKey,
+      subspaceIdEncodingScheme: opts.userScheme.encodingScheme.publicKey,
       orderSubspace: opts.userScheme.order,
     },
     newArea,
@@ -84,6 +90,7 @@ export function handoverCommunal<
   );
 }
 
+/** Returns the handover message to be signed when issuing a delegation for an owned capability. */
 export function handoverOwned<
   NamespacePublicKey,
   NamespaceSecretKey,
@@ -110,15 +117,17 @@ export function handoverOwned<
   newArea: Area<UserPublicKey>,
   newUser: UserPublicKey,
 ): Uint8Array {
+  const prevArea = getGrantedAreaOwned(prevCap);
+
   if (prevCap.delegations.length === 0) {
     const areaInArea = encodeAreaInArea(
       {
         pathScheme: opts.pathScheme,
-        subspaceScheme: opts.userScheme.encodingScheme.publicKey,
+        subspaceIdEncodingScheme: opts.userScheme.encodingScheme.publicKey,
         orderSubspace: opts.userScheme.order,
       },
       newArea,
-      getGrantedAreaCommunal(prevCap),
+      prevArea,
     );
 
     const userSignature = opts.namespaceScheme.encodingScheme.signature.encode(
@@ -136,13 +145,12 @@ export function handoverOwned<
     );
   }
 
-  const [prevArea, , prevSig] =
-    prevCap.delegations[prevCap.delegations.length - 1];
+  const [, , prevSig] = prevCap.delegations[prevCap.delegations.length - 1];
 
   const areaInArea = encodeAreaInArea(
     {
       pathScheme: opts.pathScheme,
-      subspaceScheme: opts.userScheme.encodingScheme.publicKey,
+      subspaceIdEncodingScheme: opts.userScheme.encodingScheme.publicKey,
       orderSubspace: opts.userScheme.order,
     },
     newArea,
@@ -161,5 +169,60 @@ export function handoverOwned<
     areaInArea,
     userSignature,
     userPublicKey,
+  );
+}
+
+/** Returns the handover message to be signed when issuing a delegation for an subspace capability. */
+export function handoverSubspace<
+  NamespacePublicKey,
+  NamespaceSecretKey,
+  NamespaceSignature,
+  UserPublicKey,
+  UserSecretKey,
+  UserSignature,
+>(
+  opts: {
+    pathScheme: PathScheme;
+    namespaceScheme: KeypairScheme<
+      NamespacePublicKey,
+      NamespaceSecretKey,
+      NamespaceSignature
+    >;
+    userScheme: UserScheme<UserPublicKey, UserSecretKey, UserSignature>;
+  },
+  prevCap: McSubspaceCapability<
+    NamespacePublicKey,
+    UserPublicKey,
+    NamespaceSignature,
+    UserSignature
+  >,
+  newUser: UserPublicKey,
+): Uint8Array {
+  if (prevCap.delegations.length === 0) {
+    const userSignature = opts.namespaceScheme.encodingScheme.signature.encode(
+      prevCap.initialAuthorisation,
+    );
+
+    const userPublicKey = opts.userScheme.encodingScheme.publicKey.encode(
+      newUser,
+    );
+
+    return concat(
+      userSignature,
+      userPublicKey,
+    );
+  }
+
+  const [, prevSig] = prevCap.delegations[prevCap.delegations.length - 1];
+
+  const userSignature = opts.userScheme.encodingScheme.signature.encode(
+    prevSig,
+  );
+
+  return concat(
+    userSignature,
+    opts.userScheme.encodingScheme.publicKey.encode(
+      newUser,
+    ),
   );
 }

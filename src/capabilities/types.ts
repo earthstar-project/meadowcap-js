@@ -10,7 +10,10 @@ export type Delegation<UserPublicKey, UserSignature> = [
   UserSignature,
 ];
 
-/** A capability that implements communal namespaces. */
+/** A capability that implements communal namespaces.
+ *
+ * https://willowprotocol.org/specs/meadowcap/index.html#communal_capabilities
+ */
 export type CommunalCapability<
   NamespacePublicKey,
   UserPublicKey,
@@ -26,7 +29,10 @@ export type CommunalCapability<
   delegations: Delegation<UserPublicKey, UserSignature>[];
 };
 
-/** A capability that implements owned namespaces. */
+/** A capability that implements owned namespaces.
+ *
+ * https://willowprotocol.org/specs/meadowcap/index.html#owned_capabilities
+ */
 export type OwnedCapability<
   NamespacePublicKey,
   UserPublicKey,
@@ -45,7 +51,10 @@ export type OwnedCapability<
   delegations: Delegation<UserPublicKey, UserSignature>[];
 };
 
-/** A Meadowcap capability */
+/** A Meadowcap capability.
+ *
+ * https://willowprotocol.org/specs/meadowcap/index.html#proper_capabilities
+ */
 export type McCapability<
   NamespacePublicKey,
   UserPublicKey,
@@ -64,7 +73,10 @@ export type McCapability<
     UserSignature
   >;
 
-/** A capability that certifies read access to arbitrary SubspaceIds at some unspecified Path. */
+/** A capability that certifies read access to arbitrary SubspaceIds at some unspecified Path.
+ *
+ * https://willowprotocol.org/specs/pai/index.html#McSubspaceCapability
+ */
 export type McSubspaceCapability<
   NamespacePublicKey,
   UserPublicKey,

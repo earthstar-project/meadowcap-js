@@ -449,16 +449,12 @@ Deno.test("isAuthorisedWrite", async () => {
     const payload = new TextEncoder().encode("Hello");
 
     const entry: Entry<ArrayBuffer, ArrayBuffer, ArrayBuffer> = {
-      identifier: {
-        namespace: namespaceKeypair.publicKey,
-        subspace: userKeypair.publicKey,
-        path: [],
-      },
-      record: {
-        length: BigInt(payload.byteLength),
-        payloadDigest: await crypto.subtle.digest("SHA-256", payload),
-        timestamp: BigInt(0),
-      },
+      namespaceId: namespaceKeypair.publicKey,
+      subspaceId: userKeypair.publicKey,
+      path: [],
+      payloadLength: BigInt(payload.byteLength),
+      payloadDigest: await crypto.subtle.digest("SHA-256", payload),
+      timestamp: BigInt(0),
     };
 
     const encodedEntry = encodeEntry({
@@ -496,16 +492,12 @@ Deno.test("isAuthorisedWrite", async () => {
     const payload = new TextEncoder().encode("Heehee");
 
     const entry: Entry<ArrayBuffer, ArrayBuffer, ArrayBuffer> = {
-      identifier: {
-        namespace: namespaceKeypair.publicKey,
-        subspace: userKeypair2.publicKey,
-        path: [],
-      },
-      record: {
-        length: BigInt(payload.byteLength),
-        payloadDigest: await crypto.subtle.digest("SHA-256", payload),
-        timestamp: BigInt(0),
-      },
+      namespaceId: namespaceKeypair.publicKey,
+      subspaceId: userKeypair2.publicKey,
+      path: [],
+      payloadLength: BigInt(payload.byteLength),
+      payloadDigest: await crypto.subtle.digest("SHA-256", payload),
+      timestamp: BigInt(0),
     };
 
     const encodedEntry = encodeEntry({
@@ -543,16 +535,12 @@ Deno.test("isAuthorisedWrite", async () => {
     const payload = new TextEncoder().encode("Mohoho");
 
     const entry: Entry<ArrayBuffer, ArrayBuffer, ArrayBuffer> = {
-      identifier: {
-        namespace: namespaceKeypair.publicKey,
-        subspace: userKeypair.publicKey,
-        path: [],
-      },
-      record: {
-        length: BigInt(payload.byteLength),
-        payloadDigest: await crypto.subtle.digest("SHA-256", payload),
-        timestamp: BigInt(0),
-      },
+      namespaceId: namespaceKeypair.publicKey,
+      subspaceId: userKeypair.publicKey,
+      path: [],
+      payloadLength: BigInt(payload.byteLength),
+      payloadDigest: await crypto.subtle.digest("SHA-256", payload),
+      timestamp: BigInt(0),
     };
 
     const encodedEntry = encodeEntry({

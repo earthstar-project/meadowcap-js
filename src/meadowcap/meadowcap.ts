@@ -354,7 +354,7 @@ export class Meadowcap<
       NamespaceSignature,
       UserSignature
     >,
-    entry: Entry<NamespacePublicKey, UserPublicKey, unknown>,
+    entry: Entry<NamespacePublicKey, UserPublicKey, PayloadDigest>,
   ): Promise<boolean> {
     if (token.capability.accessMode !== "write") {
       return false;

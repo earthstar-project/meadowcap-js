@@ -65,11 +65,19 @@ const ecdsaScheme: KeypairScheme<ArrayBuffer, CryptoKey, ArrayBuffer> = {
       encode: (key) => new Uint8Array(key),
       decode: (key) => key.buffer,
       encodedLength: () => 65,
+      decodeStream: () => {
+        // Not used here.
+        return Promise.resolve(new Uint8Array());
+      },
     },
     signature: {
       encode: (sig: ArrayBuffer) => new Uint8Array(sig),
       decode: (enc: Uint8Array) => enc.buffer,
       encodedLength: () => 64,
+      decodeStream: () => {
+        // Not used here.
+        return Promise.resolve(new Uint8Array());
+      },
     },
   },
   signatureScheme: {
@@ -139,6 +147,10 @@ function getTestMc() {
       encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
       decode: (enc: Uint8Array) => enc.buffer,
       encodedLength: () => 32,
+      decodeStream: () => {
+        // Not used here.
+        return Promise.resolve(new Uint8Array());
+      },
     },
   });
 }
@@ -469,6 +481,10 @@ Deno.test("isAuthorisedWrite", async () => {
         encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
         decode: (enc: Uint8Array) => enc.buffer,
         encodedLength: () => 32,
+        decodeStream: () => {
+          // Not used here.
+          return Promise.resolve(new Uint8Array());
+        },
       },
     }, entry);
 
@@ -512,6 +528,10 @@ Deno.test("isAuthorisedWrite", async () => {
         encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
         decode: (enc: Uint8Array) => enc.buffer,
         encodedLength: () => 32,
+        decodeStream: () => {
+          // Not used here.
+          return Promise.resolve(new Uint8Array());
+        },
       },
     }, entry);
 
@@ -555,6 +575,10 @@ Deno.test("isAuthorisedWrite", async () => {
         encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
         decode: (enc: Uint8Array) => enc.buffer,
         encodedLength: () => 32,
+        decodeStream: () => {
+          // Not used here.
+          return Promise.resolve(new Uint8Array());
+        },
       },
     }, entry);
 

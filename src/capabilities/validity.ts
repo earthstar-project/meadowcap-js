@@ -3,8 +3,8 @@ import {
   concat,
   KeypairScheme,
   PathScheme,
-  SubspaceScheme,
 } from "../../deps.ts";
+import { UserScheme } from "../meadowcap/types.ts";
 import {
   handoverCommunal,
   handoverOwned,
@@ -40,7 +40,7 @@ export async function isValidCapCommunal<
       NamespaceSecretKey,
       NamespaceSignature
     >;
-    userScheme: SubspaceScheme<UserPublicKey, UserSecretKey, UserSignature>;
+    userScheme: UserScheme<UserPublicKey, UserSecretKey, UserSignature>;
   },
   cap: CommunalCapability<NamespacePublicKey, UserPublicKey, UserSignature>,
 ): Promise<boolean> {
@@ -68,7 +68,7 @@ export async function isValidCapCommunal<
 
   const handover = handoverCommunal(opts, prevCap, newArea, newUser);
 
-  return opts.userScheme.signatureScheme.verify(
+  return opts.userScheme.signatures.verify(
     prevReceiver,
     newSignature,
     handover,
@@ -91,7 +91,7 @@ export async function isValidCapOwned<
       NamespaceSecretKey,
       NamespaceSignature
     >;
-    userScheme: SubspaceScheme<UserPublicKey, UserSecretKey, UserSignature>;
+    userScheme: UserScheme<UserPublicKey, UserSecretKey, UserSignature>;
   },
   cap: OwnedCapability<
     NamespacePublicKey,
@@ -107,10 +107,10 @@ export async function isValidCapOwned<
 
     const message = concat(
       accessModeByte,
-      opts.userScheme.encodingScheme.publicKey.encode(cap.userKey),
+      opts.userScheme.encodings.publicKey.encode(cap.userKey),
     );
 
-    return opts.namespaceScheme.signatureScheme.verify(
+    return opts.namespaceScheme.signatures.verify(
       cap.namespaceKey,
       cap.initialAuthorisation,
       message,
@@ -138,7 +138,7 @@ export async function isValidCapOwned<
 
   const handover = handoverOwned(opts, prevCap, newArea, newUser);
 
-  return opts.userScheme.signatureScheme.verify(
+  return opts.userScheme.signatures.verify(
     prevReceiver,
     newSignature,
     handover,
@@ -160,7 +160,7 @@ export async function isValidCapSubspace<
       NamespaceSecretKey,
       NamespaceSignature
     >;
-    userScheme: SubspaceScheme<UserPublicKey, UserSecretKey, UserSignature>;
+    userScheme: UserScheme<UserPublicKey, UserSecretKey, UserSignature>;
   },
   cap: McSubspaceCapability<
     NamespacePublicKey,
@@ -172,10 +172,10 @@ export async function isValidCapSubspace<
   if (cap.delegations.length === 0) {
     const message = concat(
       new Uint8Array([0x2]),
-      opts.userScheme.encodingScheme.publicKey.encode(cap.userKey),
+      opts.userScheme.encodings.publicKey.encode(cap.userKey),
     );
 
-    return opts.namespaceScheme.signatureScheme.verify(
+    return opts.namespaceScheme.signatures.verify(
       cap.namespaceKey,
       cap.initialAuthorisation,
       message,
@@ -194,7 +194,7 @@ export async function isValidCapSubspace<
 
   const handover = handoverSubspace(opts, prevCap, newUser);
 
-  return opts.userScheme.signatureScheme.verify(
+  return opts.userScheme.signatures.verify(
     prevReceiver,
     newSignature,
     handover,

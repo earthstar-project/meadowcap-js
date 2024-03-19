@@ -60,7 +60,7 @@ async function makeKeypairOwned() {
 }
 
 const ecdsaScheme: KeypairScheme<ArrayBuffer, CryptoKey, ArrayBuffer> = {
-  encodingScheme: {
+  encodings: {
     publicKey: {
       encode: (key) => new Uint8Array(key),
       decode: (key) => key.buffer,
@@ -80,7 +80,7 @@ const ecdsaScheme: KeypairScheme<ArrayBuffer, CryptoKey, ArrayBuffer> = {
       },
     },
   },
-  signatureScheme: {
+  signatures: {
     sign: (secretKey: CryptoKey, bytestring: Uint8Array) => {
       return crypto.subtle.sign(
         {
@@ -470,8 +470,8 @@ Deno.test("isAuthorisedWrite", async () => {
     };
 
     const encodedEntry = encodeEntry({
-      namespaceScheme: ecdsaScheme.encodingScheme.publicKey,
-      subspaceScheme: ecdsaScheme.encodingScheme.publicKey,
+      namespaceScheme: ecdsaScheme.encodings.publicKey,
+      subspaceScheme: ecdsaScheme.encodings.publicKey,
       pathScheme: {
         maxComponentCount: 3,
         maxComponentLength: 4,
@@ -488,16 +488,16 @@ Deno.test("isAuthorisedWrite", async () => {
       },
     }, entry);
 
-    const signature = await ecdsaScheme.signatureScheme.sign(
+    const signature = await ecdsaScheme.signatures.sign(
       userKeypair.privateKey,
       encodedEntry,
     );
 
     assert(
-      await mc.isAuthorisedWrite({
+      await mc.isAuthorisedWrite(entry, {
         capability: sourceCapCommunal,
         signature,
-      }, entry),
+      }),
     );
   }
 
@@ -517,8 +517,8 @@ Deno.test("isAuthorisedWrite", async () => {
     };
 
     const encodedEntry = encodeEntry({
-      namespaceScheme: ecdsaScheme.encodingScheme.publicKey,
-      subspaceScheme: ecdsaScheme.encodingScheme.publicKey,
+      namespaceScheme: ecdsaScheme.encodings.publicKey,
+      subspaceScheme: ecdsaScheme.encodings.publicKey,
       pathScheme: {
         maxComponentCount: 3,
         maxComponentLength: 4,
@@ -535,16 +535,16 @@ Deno.test("isAuthorisedWrite", async () => {
       },
     }, entry);
 
-    const signature = await ecdsaScheme.signatureScheme.sign(
+    const signature = await ecdsaScheme.signatures.sign(
       userKeypair.privateKey,
       encodedEntry,
     );
 
     assert(
-      await mc.isAuthorisedWrite({
+      await mc.isAuthorisedWrite(entry, {
         capability: sourceCapCommunal,
         signature,
-      }, entry) === false,
+      }) === false,
     );
   }
 
@@ -564,8 +564,8 @@ Deno.test("isAuthorisedWrite", async () => {
     };
 
     const encodedEntry = encodeEntry({
-      namespaceScheme: ecdsaScheme.encodingScheme.publicKey,
-      subspaceScheme: ecdsaScheme.encodingScheme.publicKey,
+      namespaceScheme: ecdsaScheme.encodings.publicKey,
+      subspaceScheme: ecdsaScheme.encodings.publicKey,
       pathScheme: {
         maxComponentCount: 3,
         maxComponentLength: 4,
@@ -582,16 +582,16 @@ Deno.test("isAuthorisedWrite", async () => {
       },
     }, entry);
 
-    const signature = await ecdsaScheme.signatureScheme.sign(
+    const signature = await ecdsaScheme.signatures.sign(
       userKeypair2.privateKey,
       encodedEntry,
     );
 
     assert(
-      await mc.isAuthorisedWrite({
+      await mc.isAuthorisedWrite(entry, {
         capability: sourceCapCommunal,
         signature,
-      }, entry) === false,
+      }) === false,
     );
   }
 });

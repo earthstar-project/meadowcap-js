@@ -119,10 +119,10 @@ export class Meadowcap<
 
     const message = concat(
       accessModeByte,
-      this.params.userScheme.encodingScheme.publicKey.encode(user),
+      this.params.userScheme.encodings.publicKey.encode(user),
     );
 
-    const signature = await this.params.namespaceKeypairScheme.signatureScheme
+    const signature = await this.params.namespaceKeypairScheme.signatures
       .sign(
         namespaceSecret,
         message,
@@ -229,7 +229,7 @@ export class Meadowcap<
         user,
       );
 
-      const signature = await this.params.userScheme.signatureScheme.sign(
+      const signature = await this.params.userScheme.signatures.sign(
         secret,
         handover,
       );
@@ -263,7 +263,7 @@ export class Meadowcap<
       user,
     );
 
-    const signature = await this.params.userScheme.signatureScheme.sign(
+    const signature = await this.params.userScheme.signatures.sign(
       secret,
       handover,
     );
@@ -348,13 +348,13 @@ export class Meadowcap<
 
   /** Returns whether a `MeadowcapAuthorisationToken` is permitted to write a given entry.  */
   async isAuthorisedWrite(
+    entry: Entry<NamespacePublicKey, UserPublicKey, PayloadDigest>,
     token: MeadowcapAuthorisationToken<
       NamespacePublicKey,
       UserPublicKey,
       NamespaceSignature,
       UserSignature
     >,
-    entry: Entry<NamespacePublicKey, UserPublicKey, PayloadDigest>,
   ): Promise<boolean> {
     if (token.capability.accessMode !== "write") {
       return false;
@@ -375,14 +375,13 @@ export class Meadowcap<
     const receiver = this.getCapReceiver(token.capability);
 
     const encodedEntry = encodeEntry({
-      namespaceScheme:
-        this.params.namespaceKeypairScheme.encodingScheme.publicKey,
+      namespaceScheme: this.params.namespaceKeypairScheme.encodings.publicKey,
       pathScheme: this.params.pathScheme,
-      subspaceScheme: this.params.userScheme.encodingScheme.publicKey,
+      subspaceScheme: this.params.userScheme.encodings.publicKey,
       payloadScheme: this.params.payloadScheme,
     }, entry);
 
-    return this.params.userScheme.signatureScheme.verify(
+    return this.params.userScheme.signatures.verify(
       receiver,
       token.signature,
       encodedEntry,

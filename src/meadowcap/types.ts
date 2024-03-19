@@ -2,7 +2,8 @@ import {
   EncodingScheme,
   KeypairScheme,
   PathScheme,
-  SubspaceScheme,
+  SignatureScheme,
+  TotalOrder,
 } from "../../deps.ts";
 import { McCapability } from "../capabilities/types.ts";
 
@@ -51,8 +52,9 @@ export type IsCommunalFn<NamespacePublicKey> = (
   pubkey: NamespacePublicKey,
 ) => boolean;
 
-export type UserScheme<UserPublicKey, UserSecret, UserSignature> =
-  SubspaceScheme<UserPublicKey, UserSecret, UserSignature>;
+export type UserScheme<UserPublicKey, UserSecret, UserSignature> = {
+  order: TotalOrder<UserPublicKey>;
+} & KeypairScheme<UserPublicKey, UserSecret, UserSignature>;
 
 /** To be used as an AuthorizationToken for Willow. */
 export type MeadowcapAuthorisationToken<

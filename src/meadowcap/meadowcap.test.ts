@@ -81,7 +81,11 @@ const ecdsaScheme: KeypairScheme<ArrayBuffer, CryptoKey, ArrayBuffer> = {
     },
   },
   signatures: {
-    sign: (secretKey: CryptoKey, bytestring: Uint8Array) => {
+    sign: (
+      _publicKey: ArrayBuffer,
+      secretKey: CryptoKey,
+      bytestring: Uint8Array,
+    ) => {
       return crypto.subtle.sign(
         {
           name: "ECDSA",
@@ -489,6 +493,7 @@ Deno.test("isAuthorisedWrite", async () => {
     }, entry);
 
     const signature = await ecdsaScheme.signatures.sign(
+      userKeypair.publicKey,
       userKeypair.privateKey,
       encodedEntry,
     );
@@ -536,6 +541,7 @@ Deno.test("isAuthorisedWrite", async () => {
     }, entry);
 
     const signature = await ecdsaScheme.signatures.sign(
+      userKeypair.publicKey,
       userKeypair.privateKey,
       encodedEntry,
     );
@@ -583,6 +589,7 @@ Deno.test("isAuthorisedWrite", async () => {
     }, entry);
 
     const signature = await ecdsaScheme.signatures.sign(
+      userKeypair2.publicKey,
       userKeypair2.privateKey,
       encodedEntry,
     );

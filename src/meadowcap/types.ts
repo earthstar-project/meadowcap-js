@@ -2,7 +2,6 @@ import {
   EncodingScheme,
   KeypairScheme,
   PathScheme,
-  SignatureScheme,
   TotalOrder,
 } from "../../deps.ts";
 import { McCapability } from "../capabilities/types.ts";

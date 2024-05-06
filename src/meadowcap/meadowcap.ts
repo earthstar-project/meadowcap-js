@@ -124,6 +124,7 @@ export class Meadowcap<
 
     const signature = await this.params.namespaceKeypairScheme.signatures
       .sign(
+        namespace,
         namespaceSecret,
         message,
       );
@@ -230,6 +231,7 @@ export class Meadowcap<
       );
 
       const signature = await this.params.userScheme.signatures.sign(
+        user,
         secret,
         handover,
       );
@@ -264,6 +266,7 @@ export class Meadowcap<
     );
 
     const signature = await this.params.userScheme.signatures.sign(
+      user,
       secret,
       handover,
     );

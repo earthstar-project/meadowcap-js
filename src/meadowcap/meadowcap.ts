@@ -1,4 +1,5 @@
 import {
+  ANY_SUBSPACE,
   Area,
   areaIsIncluded,
   concat,
@@ -17,12 +18,14 @@ import {
   encodeSubspaceCapability,
   handoverCommunal,
   handoverOwned,
+  handoverSubspace,
 } from "../capabilities/encoding.ts";
 import {
   getGrantedAreaCommunal,
   getGrantedAreaOwned,
   getGrantedNamespace,
   getReceiver,
+  getReceiverSubspaceCap,
 } from "../capabilities/semantics.ts";
 import {
   AccessMode,
@@ -34,6 +37,7 @@ import {
 import {
   isValidCapCommunal,
   isValidCapOwned,
+  isValidCapSubspace,
 } from "../capabilities/validity.ts";
 import { InvalidCapError, MeadowcapError } from "./errors.ts";
 
@@ -151,7 +155,7 @@ export class Meadowcap<
   }
 
   /** Delegate a capability to a `UserPublicKey`, restricted to a given `Area`. */
-  async delegateCap(
+  async delegateCapCommunal(
     { cap, user, area, secret }: {
       cap: CommunalCapability<
         NamespacePublicKey,
@@ -169,8 +173,44 @@ export class Meadowcap<
       UserPublicKey,
       UserSignature
     >
-  >;
-  async delegateCap(
+  > {
+    if (
+      !areaIsIncluded(
+        this.params.userScheme.order,
+        area,
+        getGrantedAreaCommunal(cap),
+      )
+    ) {
+      throw new MeadowcapError(
+        "Tried to grant access to an area outside the capability's granted area.",
+      );
+    }
+
+    const handover = handoverCommunal(
+      {
+        namespaceScheme: this.params.namespaceKeypairScheme,
+        pathScheme: this.params.pathScheme,
+        userScheme: this.params.userScheme,
+      },
+      cap,
+      area,
+      user,
+    );
+
+    const signature = await this.params.userScheme.signatures.sign(
+      user,
+      secret,
+      handover,
+    );
+
+    return {
+      ...cap,
+      delegations: [...cap.delegations, [area, user, signature]],
+    };
+  }
+
+  /** Delegate a capability to a `UserPublicKey`, restricted to a given `Area`. */
+  async delegateCapOwned(
     { cap, user, area, secret }: {
       cap: OwnedCapability<
         NamespacePublicKey,
@@ -190,70 +230,7 @@ export class Meadowcap<
       NamespaceSignature,
       UserSignature
     >
-  >;
-  async delegateCap(
-    { cap, user, area, secret }: {
-      cap:
-        | CommunalCapability<
-          NamespacePublicKey,
-          UserPublicKey,
-          UserSignature
-        >
-        | OwnedCapability<
-          NamespacePublicKey,
-          UserPublicKey,
-          NamespaceSignature,
-          UserSignature
-        >;
-      user: UserPublicKey;
-      area: Area<UserPublicKey>;
-      /** The secret of this capabality's receiver. */
-      secret: UserSecretKey;
-    },
-  ): Promise<
-    McCapability<
-      NamespacePublicKey,
-      UserPublicKey,
-      NamespaceSignature,
-      UserSignature
-    >
   > {
-    if ("initialAuthorisation" in cap === false) {
-      if (
-        !areaIsIncluded(
-          this.params.userScheme.order,
-          area,
-          getGrantedAreaCommunal(cap),
-        )
-      ) {
-        throw new MeadowcapError(
-          "Tried to grant access to an area outside the capability's granted area.",
-        );
-      }
-
-      const handover = handoverCommunal(
-        {
-          namespaceScheme: this.params.namespaceKeypairScheme,
-          pathScheme: this.params.pathScheme,
-          userScheme: this.params.userScheme,
-        },
-        cap,
-        area,
-        user,
-      );
-
-      const signature = await this.params.userScheme.signatures.sign(
-        user,
-        secret,
-        handover,
-      );
-
-      return {
-        ...cap,
-        delegations: [...cap.delegations, [area, user, signature]],
-      };
-    }
-
     if (
       !areaIsIncluded(
         this.params.userScheme.order,
@@ -449,6 +426,127 @@ export class Meadowcap<
       encodingUserSig: this.params.userScheme.encodings.signature,
       orderSubspace: this.params.userScheme.order,
     }, bytes);
+  }
+
+  // Just Subspace Capability Things
+
+  /** Determine whether a Capability for an owned namespace needs a subspace capability or not. */
+  needsSubspaceCap(
+    cap: OwnedCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature
+    >,
+  ): boolean {
+    if (cap.accessMode === "write") {
+      return false;
+    }
+
+    const grantedArea = this.getCapGrantedArea(cap);
+
+    if (grantedArea.includedSubspaceId !== ANY_SUBSPACE) {
+      return false;
+    }
+
+    if (grantedArea.pathPrefix.length === 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /** Create a new subspace capability for an owned namespace. */
+  async createSubspaceCap(
+    namespaceKey: NamespacePublicKey,
+    namespaceSecret: NamespaceSecretKey,
+    userKey: UserPublicKey,
+  ): Promise<
+    McSubspaceCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature
+    >
+  > {
+    const messageToSign = concat(
+      new Uint8Array([0x2]),
+      this.params.userScheme.encodings.publicKey.encode(userKey),
+    );
+
+    const signature = await this.params.namespaceKeypairScheme.signatures.sign(
+      namespaceKey,
+      namespaceSecret,
+      messageToSign,
+    );
+
+    return {
+      namespaceKey: namespaceKey,
+      userKey: userKey,
+      delegations: [],
+      initialAuthorisation: signature,
+    };
+  }
+
+  /** Delegate a subspace capability to a `UserPublicKey`. */
+  async delegateSubspaceCap(
+    cap: McSubspaceCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature
+    >,
+    user: UserPublicKey,
+    /** The secret of this capabality's receiver. */
+    userSecret: UserSecretKey,
+  ): Promise<
+    McSubspaceCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature
+    >
+  > {
+    const handover = handoverSubspace(
+      {
+        namespaceScheme: this.params.namespaceKeypairScheme,
+        pathScheme: this.params.pathScheme,
+        userScheme: this.params.userScheme,
+      },
+      cap,
+      user,
+    );
+
+    const receiver = getReceiverSubspaceCap(cap);
+
+    const signature = await this.params.userScheme.signatures.sign(
+      receiver,
+      userSecret,
+      handover,
+    );
+
+    return {
+      namespaceKey: cap.namespaceKey,
+      userKey: cap.userKey,
+      initialAuthorisation: cap.initialAuthorisation,
+      delegations: [...cap.delegations, [user, signature]],
+    };
+  }
+
+  /** Determine whether a subspace capability is valid or not. */
+  isValidSubspaceCap(
+    cap: McSubspaceCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature
+    >,
+  ): Promise<boolean> {
+    return isValidCapSubspace({
+      namespaceScheme: this.params.namespaceKeypairScheme,
+      pathScheme: this.params.pathScheme,
+      userScheme: this.params.userScheme,
+    }, cap);
   }
 
   /** Encode a McSubspaceCapability to bytes. */

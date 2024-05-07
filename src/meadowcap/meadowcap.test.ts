@@ -234,7 +234,7 @@ Deno.test("delegateCap (communal)", async () => {
 
   const delegeeKeypair = await makeKeypair();
 
-  const delegatedCap = await mc.delegateCap({
+  const delegatedCap = await mc.delegateCapCommunal({
     cap: communalCap,
     user: delegeeKeypair.publicKey,
     secret: userKeypair.privateKey,
@@ -265,7 +265,7 @@ Deno.test("delegateCap (communal)", async () => {
 
   const delegee2Keypair = await makeKeypair();
 
-  const delegated2Cap = await mc.delegateCap({
+  const delegated2Cap = await mc.delegateCapCommunal({
     cap: delegatedCap,
     user: delegee2Keypair.publicKey,
     secret: delegeeKeypair.privateKey,
@@ -296,7 +296,7 @@ Deno.test("delegateCap (communal)", async () => {
 
   // test that delegating area outside granted area throws.
   assertRejects(async () => {
-    await mc.delegateCap({
+    await mc.delegateCapCommunal({
       cap: delegatedCap,
       user: delegee3Keypair.publicKey,
       secret: delegee2Keypair.privateKey,
@@ -313,7 +313,7 @@ Deno.test("delegateCap (communal)", async () => {
 
   // test that signing with the wrong secret throws.
 
-  const invalidCap = await mc.delegateCap({
+  const invalidCap = await mc.delegateCapCommunal({
     cap: delegatedCap,
     user: delegee3Keypair.publicKey,
     // Wrong secret.
@@ -339,7 +339,7 @@ Deno.test("delegateCap (owned)", async () => {
   const userKeypair = await makeKeypair();
 
   // Makes a valid cap.
-  const ownedKeypair = await mc.createCapOwned({
+  const ownedCap = await mc.createCapOwned({
     accessMode: "read",
     namespace: namespaceKeypair.publicKey,
     namespaceSecret: namespaceKeypair.privateKey,
@@ -350,8 +350,8 @@ Deno.test("delegateCap (owned)", async () => {
 
   const delegeeKeypair = await makeKeypair();
 
-  const delegatedCap = await mc.delegateCap({
-    cap: ownedKeypair,
+  const delegatedCap = await mc.delegateCapOwned({
+    cap: ownedCap,
     user: delegeeKeypair.publicKey,
     secret: userKeypair.privateKey,
     area: {
@@ -368,7 +368,7 @@ Deno.test("delegateCap (owned)", async () => {
 
   assertEquals(getGrantedNamespace(delegatedCap), namespaceKeypair.publicKey);
   assertEquals(getReceiver(delegatedCap), delegeeKeypair.publicKey);
-  assertEquals(getGrantedAreaCommunal(delegatedCap), {
+  assertEquals(getGrantedAreaOwned(delegatedCap), {
     pathPrefix: [new Uint8Array([1, 1, 1, 1])],
     timeRange: {
       start: BigInt(1000),
@@ -381,7 +381,7 @@ Deno.test("delegateCap (owned)", async () => {
 
   const delegee2Keypair = await makeKeypair();
 
-  const delegated2Cap = await mc.delegateCap({
+  const delegated2Cap = await mc.delegateCapOwned({
     cap: delegatedCap,
     user: delegee2Keypair.publicKey,
     secret: delegeeKeypair.privateKey,
@@ -412,7 +412,7 @@ Deno.test("delegateCap (owned)", async () => {
 
   // test that delegating area outside granted area throws.
   assertRejects(async () => {
-    await mc.delegateCap({
+    await mc.delegateCapOwned({
       cap: delegatedCap,
       user: delegee3Keypair.publicKey,
       secret: delegee2Keypair.privateKey,
@@ -429,7 +429,7 @@ Deno.test("delegateCap (owned)", async () => {
 
   // test that signing with the wrong secret produces invalid cap.
 
-  const invalidCap = await mc.delegateCap({
+  const invalidCap = await mc.delegateCapOwned({
     cap: delegatedCap,
     user: delegee3Keypair.publicKey,
     // Wrong secret.
@@ -601,4 +601,107 @@ Deno.test("isAuthorisedWrite", async () => {
       }) === false,
     );
   }
+});
+
+Deno.test("needsSubspaceCapability", async () => {
+  const mc = getTestMc();
+
+  const namespaceKeypair = await makeKeypairOwned();
+  const userKeypair = await makeKeypair();
+
+  const writeCap = await mc.createCapOwned({
+    accessMode: "write",
+    namespace: namespaceKeypair.publicKey,
+    user: userKeypair.publicKey,
+    namespaceSecret: namespaceKeypair.privateKey,
+  });
+
+  assertEquals(mc.needsSubspaceCap(writeCap), false);
+
+  const readCap = await mc.createCapOwned({
+    accessMode: "read",
+    namespace: namespaceKeypair.publicKey,
+    user: userKeypair.publicKey,
+    namespaceSecret: namespaceKeypair.privateKey,
+  });
+
+  assertEquals(mc.needsSubspaceCap(readCap), false);
+
+  const delegatedToSubspace = await mc.delegateCapOwned({
+    cap: readCap,
+    secret: userKeypair.privateKey,
+    user: userKeypair.publicKey,
+    area: {
+      includedSubspaceId: userKeypair.publicKey,
+      pathPrefix: [],
+      timeRange: {
+        start: 0n,
+        end: 1000n,
+      },
+    },
+  });
+
+  assertEquals(mc.needsSubspaceCap(delegatedToSubspace), false);
+
+  const delegatedToNonEmptyPath = await mc.delegateCapOwned({
+    cap: readCap,
+    secret: userKeypair.privateKey,
+    user: userKeypair.publicKey,
+    area: {
+      includedSubspaceId: ANY_SUBSPACE,
+      pathPrefix: [new Uint8Array([77])],
+      timeRange: {
+        start: 0n,
+        end: 1000n,
+      },
+    },
+  });
+
+  assertEquals(mc.needsSubspaceCap(delegatedToNonEmptyPath), true);
+});
+
+Deno.test("createSubspaceCap", async () => {
+  const mc = getTestMc();
+
+  const namespaceKeypair = await makeKeypairOwned();
+  const userKeypair = await makeKeypair();
+
+  const subspaceCap = await mc.createSubspaceCap(
+    namespaceKeypair.publicKey,
+    namespaceKeypair.privateKey,
+    userKeypair.publicKey,
+  );
+
+  assert(mc.isValidSubspaceCap(subspaceCap));
+});
+
+Deno.test("delegateSubspaceCapability", async () => {
+  const mc = getTestMc();
+
+  const namespaceKeypair = await makeKeypairOwned();
+  const userKeypair = await makeKeypair();
+
+  const subspaceCap = await mc.createSubspaceCap(
+    namespaceKeypair.publicKey,
+    namespaceKeypair.privateKey,
+    userKeypair.publicKey,
+  );
+
+  const userKeypair2 = await makeKeypair();
+
+  const badDelegatedCap = await mc.delegateSubspaceCap(
+    subspaceCap,
+    userKeypair2.publicKey,
+    userKeypair2.privateKey,
+  );
+
+  assertEquals(await mc.isValidSubspaceCap(badDelegatedCap), false);
+
+  const delegatedCap = await mc.delegateSubspaceCap(
+    subspaceCap,
+    userKeypair2.publicKey,
+    userKeypair.privateKey,
+  );
+
+  assert(await mc.isValidSubspaceCap(delegatedCap));
 });

@@ -11,6 +11,7 @@ import { handoverCommunal, handoverOwned } from "../capabilities/encoding.ts";
 import {
   getGrantedAreaCommunal,
   getGrantedAreaOwned,
+  getGrantedNamespace,
   getReceiver,
 } from "../capabilities/semantics.ts";
 import {

@@ -723,7 +723,7 @@ export async function decodeStreamMcCapability<
       bytes.array.subarray(0, delLengthCompactWidth),
     );
 
-    bytes.prune(4);
+    bytes.prune(delLengthCompactWidth);
   } else {
     delegationsLength = delLengthBits;
   }
@@ -761,6 +761,253 @@ export async function decodeStreamMcCapability<
 
   return {
     accessMode,
+    initialAuthorisation,
+    namespaceKey: namespace,
+    userKey: user,
+    delegations,
+  };
+}
+
+export function encodeSubspaceCapability<
+  NamespacePublicKey,
+  UserPublicKey,
+  NamespaceSignature,
+  UserSignature,
+>(
+  opts: {
+    omitNamespace?: boolean;
+    orderSubspace: TotalOrder<UserPublicKey>;
+    pathScheme: PathScheme;
+    encodingNamespace: EncodingScheme<NamespacePublicKey>;
+    encodingUser: EncodingScheme<UserPublicKey>;
+    encodingNamespaceSig: EncodingScheme<NamespaceSignature>;
+    encodingUserSig: EncodingScheme<UserSignature>;
+  },
+  cap: McSubspaceCapability<
+    NamespacePublicKey,
+    UserPublicKey,
+    NamespaceSignature,
+    UserSignature
+  >,
+): Uint8Array {
+  const header = getDelegationLengthMask(cap.delegations.length) | 0xc0;
+
+  const delLength = cap.delegations.length <= 59
+    ? new Uint8Array(0)
+    : encodeCompactWidth(cap.delegations.length);
+
+  const namespaceEncoded = opts.omitNamespace
+    ? new Uint8Array()
+    : opts.encodingNamespace.encode(cap.namespaceKey);
+
+  const userEncoded = opts.encodingUser.encode(cap.userKey);
+
+  const sigEncoded = opts.encodingNamespaceSig.encode(cap.initialAuthorisation);
+
+  const encodedDelegationsAcc = [];
+
+  for (const delegation of cap.delegations) {
+    const [pk, sig] = delegation;
+
+    const userPkEnc = opts.encodingUser.encode(pk);
+    const sigEnc = opts.encodingUserSig.encode(sig);
+
+    encodedDelegationsAcc.push(concat(userPkEnc, sigEnc));
+  }
+
+  return concat(
+    new Uint8Array([header]),
+    namespaceEncoded,
+    userEncoded,
+    sigEncoded,
+    delLength,
+    ...encodedDelegationsAcc,
+  );
+}
+
+export function decodeSubspaceCapability<
+  NamespacePublicKey,
+  UserPublicKey,
+  NamespaceSignature,
+  UserSignature,
+>(
+  opts: {
+    knownNamespace?: NamespacePublicKey;
+    orderSubspace: TotalOrder<UserPublicKey>;
+    pathScheme: PathScheme;
+    encodingNamespace: EncodingScheme<NamespacePublicKey>;
+    encodingUser: EncodingScheme<UserPublicKey>;
+    encodingNamespaceSig: EncodingScheme<NamespaceSignature>;
+    encodingUserSig: EncodingScheme<UserSignature>;
+  },
+  encoded: Uint8Array,
+): McSubspaceCapability<
+  NamespacePublicKey,
+  UserPublicKey,
+  NamespaceSignature,
+  UserSignature
+> {
+  const [firstByte] = encoded;
+
+  const delLengthBits = firstByte & 0x3f;
+
+  const delLengthCompactWidth = delLengthBits === 0x3f
+    ? 8
+    : delLengthBits === 0x3e
+    ? 4
+    : delLengthBits === 0x3d
+    ? 2
+    : delLengthBits === 0x3c
+    ? 1
+    : 0;
+
+  const namespace = opts.knownNamespace ||
+    opts.encodingNamespace.decode(encoded.subarray(1));
+
+  const namespaceLength = opts.knownNamespace
+    ? 0
+    : opts.encodingNamespace.encodedLength(namespace);
+
+  const user = opts.encodingUser.decode(
+    encoded.subarray(1 + namespaceLength),
+  );
+
+  const userLength = opts.encodingUser.encodedLength(user);
+
+  const sig = opts.encodingNamespaceSig.decode(
+    encoded.subarray(1 + namespaceLength + userLength),
+  );
+
+  const sigLength = opts.encodingNamespaceSig.encodedLength(sig);
+
+  const delegationsLength = delLengthCompactWidth > 0
+    ? decodeCompactWidth(
+      encoded.subarray(
+        1 + namespaceLength + userLength + sigLength,
+        1 + namespaceLength + userLength + sigLength + delLengthCompactWidth,
+      ),
+    )
+    : delLengthBits;
+
+  let delPos = 1 + namespaceLength + userLength + sigLength +
+    delLengthCompactWidth;
+  let remainingDelegations = Number(delegationsLength);
+
+  const delegations: [UserPublicKey, UserSignature][] = [];
+
+  while (remainingDelegations > 0) {
+    const delegee = opts.encodingUser.decode(
+      encoded.subarray(delPos),
+    );
+
+    const delegeeLen = opts.encodingUser.encodedLength(delegee);
+
+    const sig = opts.encodingUserSig.decode(
+      encoded.subarray(delPos + delegeeLen),
+    );
+
+    const sigLength = opts.encodingUserSig.encodedLength(sig);
+
+    delegations.push([
+      delegee,
+      sig,
+    ]);
+
+    remainingDelegations -= 1;
+    delPos += delegeeLen + sigLength;
+  }
+
+  return {
+    namespaceKey: namespace,
+    userKey: user,
+    initialAuthorisation: sig,
+    delegations,
+  };
+}
+
+export async function decodeStreamSubspaceCapability<
+  NamespacePublicKey,
+  UserPublicKey,
+  NamespaceSignature,
+  UserSignature,
+>(
+  opts: {
+    knownNamespace?: NamespacePublicKey;
+    orderSubspace: TotalOrder<UserPublicKey>;
+    pathScheme: PathScheme;
+    encodingNamespace: EncodingScheme<NamespacePublicKey>;
+    encodingUser: EncodingScheme<UserPublicKey>;
+    encodingNamespaceSig: EncodingScheme<NamespaceSignature>;
+    encodingUserSig: EncodingScheme<UserSignature>;
+  },
+  bytes: GrowingBytes,
+): Promise<
+  McSubspaceCapability<
+    NamespacePublicKey,
+    UserPublicKey,
+    NamespaceSignature,
+    UserSignature
+  >
+> {
+  await bytes.nextAbsolute(1);
+
+  const [firstByte] = bytes.array;
+
+  const delLengthBits = firstByte & 0x3f;
+
+  const delLengthCompactWidth = delLengthBits === 0x3f
+    ? 8
+    : delLengthBits === 0x3e
+    ? 4
+    : delLengthBits === 0x3d
+    ? 2
+    : delLengthBits === 0x3c
+    ? 1
+    : 0;
+
+  bytes.prune(1);
+
+  const namespace = opts.knownNamespace ||
+    await opts.encodingNamespace.decodeStream(bytes);
+
+  const user = await opts.encodingUser.decodeStream(bytes);
+
+  const initialAuthorisation = await opts.encodingNamespaceSig.decodeStream(
+    bytes,
+  );
+
+  let delegationsLength;
+
+  if (delLengthCompactWidth > 0) {
+    await bytes.nextAbsolute(delLengthCompactWidth);
+
+    delegationsLength = decodeCompactWidth(
+      bytes.array.subarray(0, delLengthCompactWidth),
+    );
+
+    bytes.prune(delLengthCompactWidth);
+  } else {
+    delegationsLength = delLengthBits;
+  }
+
+  let remainingDelegations = Number(delegationsLength);
+
+  const delegations: [UserPublicKey, UserSignature][] = [];
+
+  while (remainingDelegations > 0) {
+    const delegee = await opts.encodingUser.decodeStream(bytes);
+
+    const sig = await opts.encodingUserSig.decodeStream(bytes);
+
+    delegations.push([
+      delegee,
+      sig,
+    ]);
+
+    remainingDelegations -= 1;
+  }
+
+  return {
     initialAuthorisation,
     namespaceKey: namespace,
     userKey: user,

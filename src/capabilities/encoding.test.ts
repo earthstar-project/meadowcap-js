@@ -3,9 +3,12 @@ import { delay } from "https://deno.land/std@0.202.0/async/delay.ts";
 import {
   decodeMcCapability,
   decodeStreamMcCapability,
+  decodeStreamSubspaceCapability,
+  decodeSubspaceCapability,
   encodeMcCapability,
+  encodeSubspaceCapability,
 } from "./encoding.ts";
-import { McCapability } from "./types.ts";
+import { McCapability, McSubspaceCapability } from "./types.ts";
 
 import {
   EncodingScheme,
@@ -14,13 +17,6 @@ import {
   orderBytes,
 } from "../../deps.ts";
 import { assertEquals } from "$std/assert/assert_equals.ts";
-
-type CapVector = McCapability<
-  Uint8Array,
-  Uint8Array,
-  Uint8Array,
-  Uint8Array
->;
 
 function makeEncodings(len: number): EncodingScheme<Uint8Array> {
   return {
@@ -50,6 +46,13 @@ const userKeyEncodings = makeEncodings(USER_KEY_LEN);
 const userSigEncodings = makeEncodings(USER_SIG_LEN);
 
 const subspace = crypto.getRandomValues(new Uint8Array(USER_KEY_LEN));
+
+type CapVector = McCapability<
+  Uint8Array,
+  Uint8Array,
+  Uint8Array,
+  Uint8Array
+>;
 
 const vectors: CapVector[] = [
   {
@@ -273,10 +276,9 @@ Deno.test("Cap encoding roundtrip (streaming)", async () => {
 
     const bytes = new GrowingBytes(stream);
 
-    (async () => {
+    (() => {
       for (const byte of encoded) {
         stream.push(new Uint8Array([byte]));
-        await delay(0);
       }
     })();
 
@@ -295,6 +297,205 @@ Deno.test("Cap encoding roundtrip (streaming)", async () => {
       },
     }, bytes);
 
+    await delay(0);
+
     assertEquals(decoded, cap);
+  }
+});
+
+type SubspaceCapVector = McSubspaceCapability<
+  Uint8Array,
+  Uint8Array,
+  Uint8Array,
+  Uint8Array
+>;
+
+const subspaceVectors: SubspaceCapVector[] = [
+  {
+    initialAuthorisation: crypto.getRandomValues(
+      new Uint8Array(NAMESPACE_SIG_LEN),
+    ),
+    namespaceKey: crypto.getRandomValues(new Uint8Array(NAMESPACE_KEY_LEN)),
+    userKey: subspace,
+    delegations: [[
+      crypto.getRandomValues(new Uint8Array(USER_KEY_LEN)),
+      crypto.getRandomValues(new Uint8Array(USER_SIG_LEN)),
+    ], [
+      crypto.getRandomValues(new Uint8Array(USER_KEY_LEN)),
+      crypto.getRandomValues(new Uint8Array(USER_SIG_LEN)),
+    ], [
+      crypto.getRandomValues(new Uint8Array(USER_KEY_LEN)),
+      crypto.getRandomValues(new Uint8Array(USER_SIG_LEN)),
+    ]],
+  },
+  {
+    initialAuthorisation: crypto.getRandomValues(
+      new Uint8Array(NAMESPACE_SIG_LEN),
+    ),
+    namespaceKey: crypto.getRandomValues(new Uint8Array(NAMESPACE_KEY_LEN)),
+    userKey: subspace,
+    delegations: [],
+  },
+];
+
+Deno.test("Subspace Cap encoding roundtrip", () => {
+  for (const cap of subspaceVectors) {
+    const encoded = encodeSubspaceCapability({
+      encodingNamespace: namespaceKeyEncodings,
+      encodingNamespaceSig: namespaceSigEncodings,
+      encodingUser: userKeyEncodings,
+      encodingUserSig: userSigEncodings,
+      orderSubspace: (a, b) => {
+        return orderBytes(new Uint8Array(a), new Uint8Array(b));
+      },
+      pathScheme: {
+        maxComponentCount: 255,
+        maxComponentLength: 255,
+        maxPathLength: 255,
+      },
+    }, cap);
+
+    const decoded = decodeSubspaceCapability({
+      encodingNamespace: namespaceKeyEncodings,
+      encodingNamespaceSig: namespaceSigEncodings,
+      encodingUser: userKeyEncodings,
+      encodingUserSig: userSigEncodings,
+      orderSubspace: (a, b) => {
+        return orderBytes(new Uint8Array(a), new Uint8Array(b));
+      },
+      pathScheme: {
+        maxComponentCount: 255,
+        maxComponentLength: 255,
+        maxPathLength: 255,
+      },
+    }, encoded);
+
+    assertEquals(decoded, cap);
+
+    const encoded2 = encodeSubspaceCapability({
+      omitNamespace: true,
+      encodingNamespace: namespaceKeyEncodings,
+      encodingNamespaceSig: namespaceSigEncodings,
+      encodingUser: userKeyEncodings,
+      encodingUserSig: userSigEncodings,
+      orderSubspace: (a, b) => {
+        return orderBytes(new Uint8Array(a), new Uint8Array(b));
+      },
+      pathScheme: {
+        maxComponentCount: 255,
+        maxComponentLength: 255,
+        maxPathLength: 255,
+      },
+    }, cap);
+
+    const decoded2 = decodeSubspaceCapability({
+      knownNamespace: cap.namespaceKey,
+      encodingNamespace: namespaceKeyEncodings,
+      encodingNamespaceSig: namespaceSigEncodings,
+      encodingUser: userKeyEncodings,
+      encodingUserSig: userSigEncodings,
+      orderSubspace: (a, b) => {
+        return orderBytes(new Uint8Array(a), new Uint8Array(b));
+      },
+      pathScheme: {
+        maxComponentCount: 255,
+        maxComponentLength: 255,
+        maxPathLength: 255,
+      },
+    }, encoded2);
+
+    assertEquals(decoded2, cap);
+  }
+});
+
+Deno.test("Subspace Cap encoding roundtrip (streaming)", async () => {
+  for (const cap of subspaceVectors) {
+    const encoded = encodeSubspaceCapability({
+      encodingNamespace: namespaceKeyEncodings,
+      encodingNamespaceSig: namespaceSigEncodings,
+      encodingUser: userKeyEncodings,
+      encodingUserSig: userSigEncodings,
+      orderSubspace: (a, b) => {
+        return orderBytes(new Uint8Array(a), new Uint8Array(b));
+      },
+      pathScheme: {
+        maxComponentCount: 255,
+        maxComponentLength: 255,
+        maxPathLength: 255,
+      },
+    }, cap);
+
+    const stream = new FIFO<Uint8Array>();
+
+    const bytes = new GrowingBytes(stream);
+
+    (() => {
+      for (const byte of encoded) {
+        stream.push(new Uint8Array([byte]));
+      }
+    })();
+
+    const decoded = await decodeStreamSubspaceCapability({
+      encodingNamespace: namespaceKeyEncodings,
+      encodingNamespaceSig: namespaceSigEncodings,
+      encodingUser: userKeyEncodings,
+      encodingUserSig: userSigEncodings,
+      orderSubspace: (a, b) => {
+        return orderBytes(new Uint8Array(a), new Uint8Array(b));
+      },
+      pathScheme: {
+        maxComponentCount: 255,
+        maxComponentLength: 255,
+        maxPathLength: 255,
+      },
+    }, bytes);
+
+    assertEquals(decoded, cap);
+
+    const encoded2 = encodeSubspaceCapability({
+      omitNamespace: true,
+      encodingNamespace: namespaceKeyEncodings,
+      encodingNamespaceSig: namespaceSigEncodings,
+      encodingUser: userKeyEncodings,
+      encodingUserSig: userSigEncodings,
+      orderSubspace: (a, b) => {
+        return orderBytes(new Uint8Array(a), new Uint8Array(b));
+      },
+      pathScheme: {
+        maxComponentCount: 255,
+        maxComponentLength: 255,
+        maxPathLength: 255,
+      },
+    }, cap);
+
+    const stream2 = new FIFO<Uint8Array>();
+
+    const bytes2 = new GrowingBytes(stream2);
+
+    (() => {
+      for (const byte of encoded2) {
+        stream2.push(new Uint8Array([byte]));
+      }
+    })();
+
+    const decoded2 = await decodeStreamSubspaceCapability({
+      knownNamespace: cap.namespaceKey,
+      encodingNamespace: namespaceKeyEncodings,
+      encodingNamespaceSig: namespaceSigEncodings,
+      encodingUser: userKeyEncodings,
+      encodingUserSig: userSigEncodings,
+      orderSubspace: (a, b) => {
+        return orderBytes(new Uint8Array(a), new Uint8Array(b));
+      },
+      pathScheme: {
+        maxComponentCount: 255,
+        maxComponentLength: 255,
+        maxPathLength: 255,
+      },
+    }, bytes2);
+
+    await delay(0);
+
+    assertEquals(decoded2, cap);
   }
 });

@@ -768,6 +768,20 @@ export async function decodeStreamMcCapability<
   };
 }
 
+function getSubspaceDelegationLengthMask(length: number): number {
+  if (length >= 4294967296) {
+    return 0xff;
+  } else if (length >= 65536) {
+    return 0xfe;
+  } else if (length >= 256) {
+    return 0xfd;
+  } else if (length >= 252) {
+    return 0xfc;
+  }
+
+  return length;
+}
+
 export function encodeSubspaceCapability<
   NamespacePublicKey,
   UserPublicKey,
@@ -790,9 +804,9 @@ export function encodeSubspaceCapability<
     UserSignature
   >,
 ): Uint8Array {
-  const header = getDelegationLengthMask(cap.delegations.length) | 0xc0;
+  const header = getSubspaceDelegationLengthMask(cap.delegations.length);
 
-  const delLength = cap.delegations.length <= 59
+  const delLength = cap.delegations.length <= 251
     ? new Uint8Array(0)
     : encodeCompactWidth(cap.delegations.length);
 
@@ -849,15 +863,13 @@ export function decodeSubspaceCapability<
 > {
   const [firstByte] = encoded;
 
-  const delLengthBits = firstByte & 0x3f;
-
-  const delLengthCompactWidth = delLengthBits === 0x3f
+  const delLengthCompactWidth = firstByte === 0xff
     ? 8
-    : delLengthBits === 0x3e
+    : firstByte === 0xfe
     ? 4
-    : delLengthBits === 0x3d
+    : firstByte === 0xfd
     ? 2
-    : delLengthBits === 0x3c
+    : firstByte === 0xfc
     ? 1
     : 0;
 
@@ -887,7 +899,7 @@ export function decodeSubspaceCapability<
         1 + namespaceLength + userLength + sigLength + delLengthCompactWidth,
       ),
     )
-    : delLengthBits;
+    : firstByte;
 
   let delPos = 1 + namespaceLength + userLength + sigLength +
     delLengthCompactWidth;
@@ -953,15 +965,13 @@ export async function decodeStreamSubspaceCapability<
 
   const [firstByte] = bytes.array;
 
-  const delLengthBits = firstByte & 0x3f;
-
-  const delLengthCompactWidth = delLengthBits === 0x3f
+  const delLengthCompactWidth = firstByte === 0xff
     ? 8
-    : delLengthBits === 0x3e
+    : firstByte === 0xfe
     ? 4
-    : delLengthBits === 0x3d
+    : firstByte === 0xfd
     ? 2
-    : delLengthBits === 0x3c
+    : firstByte === 0xfc
     ? 1
     : 0;
 
@@ -987,7 +997,7 @@ export async function decodeStreamSubspaceCapability<
 
     bytes.prune(delLengthCompactWidth);
   } else {
-    delegationsLength = delLengthBits;
+    delegationsLength = firstByte;
   }
 
   let remainingDelegations = Number(delegationsLength);

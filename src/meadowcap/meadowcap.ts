@@ -5,9 +5,19 @@ import {
   encodeEntry,
   Entry,
   entryPosition,
+  GrowingBytes,
   isIncludedArea,
 } from "../../deps.ts";
-import { handoverCommunal, handoverOwned } from "../capabilities/encoding.ts";
+import {
+  decodeMcCapability,
+  decodeStreamMcCapability,
+  decodeStreamSubspaceCapability,
+  decodeSubspaceCapability,
+  encodeMcCapability,
+  encodeSubspaceCapability,
+  handoverCommunal,
+  handoverOwned,
+} from "../capabilities/encoding.ts";
 import {
   getGrantedAreaCommunal,
   getGrantedAreaOwned,
@@ -18,6 +28,7 @@ import {
   AccessMode,
   CommunalCapability,
   McCapability,
+  McSubspaceCapability,
   OwnedCapability,
 } from "../capabilities/types.ts";
 import {
@@ -390,5 +401,106 @@ export class Meadowcap<
       token.signature,
       encodedEntry,
     );
+  }
+
+  // Encoding helpers.
+
+  /** Encode a McCapability to bytes. */
+  encodeCap(
+    cap: McCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature
+    >,
+  ): Uint8Array {
+    return encodeMcCapability({
+      pathScheme: this.params.pathScheme,
+      encodingNamespace: this.params.namespaceKeypairScheme.encodings.publicKey,
+      encodingNamespaceSig:
+        this.params.namespaceKeypairScheme.encodings.signature,
+      encodingUser: this.params.userScheme.encodings.publicKey,
+      encodingUserSig: this.params.userScheme.encodings.signature,
+      orderSubspace: this.params.userScheme.order,
+    }, cap);
+  }
+
+  /** Decode a McCapability from bytes. */
+  decodeCap(encoded: Uint8Array) {
+    return decodeMcCapability({
+      pathScheme: this.params.pathScheme,
+      encodingNamespace: this.params.namespaceKeypairScheme.encodings.publicKey,
+      encodingNamespaceSig:
+        this.params.namespaceKeypairScheme.encodings.signature,
+      encodingUser: this.params.userScheme.encodings.publicKey,
+      encodingUserSig: this.params.userScheme.encodings.signature,
+      orderSubspace: this.params.userScheme.order,
+    }, encoded);
+  }
+
+  /** Decode a McCapability from an incoming stream of bytes. */
+  decodeStreamingCap(bytes: GrowingBytes) {
+    return decodeStreamMcCapability({
+      pathScheme: this.params.pathScheme,
+      encodingNamespace: this.params.namespaceKeypairScheme.encodings.publicKey,
+      encodingNamespaceSig:
+        this.params.namespaceKeypairScheme.encodings.signature,
+      encodingUser: this.params.userScheme.encodings.publicKey,
+      encodingUserSig: this.params.userScheme.encodings.signature,
+      orderSubspace: this.params.userScheme.order,
+    }, bytes);
+  }
+
+  /** Encode a McSubspaceCapability to bytes. */
+  encodeSubspaceCap(
+    cap: McSubspaceCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature
+    >,
+    omitNamespace?: boolean,
+  ) {
+    return encodeSubspaceCapability({
+      omitNamespace,
+      pathScheme: this.params.pathScheme,
+      encodingNamespace: this.params.namespaceKeypairScheme.encodings.publicKey,
+      encodingNamespaceSig:
+        this.params.namespaceKeypairScheme.encodings.signature,
+      encodingUser: this.params.userScheme.encodings.publicKey,
+      encodingUserSig: this.params.userScheme.encodings.signature,
+      orderSubspace: this.params.userScheme.order,
+    }, cap);
+  }
+
+  /** Decode a McSubspaceCapability from bytes. */
+  decodeSubspaceCap(encoded: Uint8Array, knownNamespace?: NamespacePublicKey) {
+    return decodeSubspaceCapability({
+      knownNamespace,
+      pathScheme: this.params.pathScheme,
+      encodingNamespace: this.params.namespaceKeypairScheme.encodings.publicKey,
+      encodingNamespaceSig:
+        this.params.namespaceKeypairScheme.encodings.signature,
+      encodingUser: this.params.userScheme.encodings.publicKey,
+      encodingUserSig: this.params.userScheme.encodings.signature,
+      orderSubspace: this.params.userScheme.order,
+    }, encoded);
+  }
+
+  /** Decode a McSubspaceCapability from an incoming stream of bytes. */
+  decodeStreamingSubspaceCap(
+    bytes: GrowingBytes,
+    knownNamespace?: NamespacePublicKey,
+  ) {
+    return decodeStreamSubspaceCapability({
+      knownNamespace,
+      pathScheme: this.params.pathScheme,
+      encodingNamespace: this.params.namespaceKeypairScheme.encodings.publicKey,
+      encodingNamespaceSig:
+        this.params.namespaceKeypairScheme.encodings.signature,
+      encodingUser: this.params.userScheme.encodings.publicKey,
+      encodingUserSig: this.params.userScheme.encodings.signature,
+      orderSubspace: this.params.userScheme.order,
+    }, bytes);
   }
 }

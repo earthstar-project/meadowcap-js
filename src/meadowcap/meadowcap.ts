@@ -23,7 +23,6 @@ import {
 import {
   getGrantedAreaCommunal,
   getGrantedAreaOwned,
-  getGrantedNamespace,
   getReceiver,
   getReceiverSubspaceCap,
 } from "../capabilities/semantics.ts";
@@ -33,6 +32,10 @@ import {
   McCapability,
   McSubspaceCapability,
   OwnedCapability,
+  ReadOrWriteCommunal,
+  ReadOrWriteCommunalCap,
+  ReadOrWriteOwned,
+  ReadOrWriteOwnedCap,
 } from "../capabilities/types.ts";
 import {
   isValidCapCommunal,
@@ -86,17 +89,13 @@ export class Meadowcap<
   ) {}
 
   /** Create a capability for a communal namespace. */
-  createCapCommunal(
+  createCapCommunal<A extends AccessMode>(
     { accessMode, namespace, user }: {
-      accessMode: AccessMode;
+      accessMode: A;
       namespace: NamespacePublicKey;
       user: UserPublicKey;
     },
-  ): CommunalCapability<
-    NamespacePublicKey,
-    UserPublicKey,
-    UserSignature
-  > {
+  ): ReadOrWriteCommunal<NamespacePublicKey, UserPublicKey, UserSignature, A> {
     if (!this.params.isCommunal(namespace)) {
       throw new MeadowcapError(
         "Tried to create a communal cap from an owned namespace",
@@ -108,21 +107,30 @@ export class Meadowcap<
       namespaceKey: namespace,
       userKey: user,
       delegations: [],
-    };
+    } as ReadOrWriteCommunal<
+      NamespacePublicKey,
+      UserPublicKey,
+      UserSignature,
+      A
+    >;
   }
 
   /** Create a capability for an owned namespace. */
-  async createCapOwned({ accessMode, namespace, namespaceSecret, user }: {
-    accessMode: AccessMode;
-    namespace: NamespacePublicKey;
-    namespaceSecret: NamespaceSecretKey;
-    user: UserPublicKey;
-  }): Promise<
-    OwnedCapability<
+
+  async createCapOwned<A extends AccessMode>(
+    { accessMode, namespace, namespaceSecret, user }: {
+      accessMode: A;
+      namespace: NamespacePublicKey;
+      namespaceSecret: NamespaceSecretKey;
+      user: UserPublicKey;
+    },
+  ): Promise<
+    ReadOrWriteOwned<
       NamespacePublicKey,
       UserPublicKey,
       NamespaceSignature,
-      UserSignature
+      UserSignature,
+      A
     >
   > {
     if (this.params.isCommunal(namespace)) {
@@ -151,27 +159,37 @@ export class Meadowcap<
       userKey: user,
       initialAuthorisation: signature,
       delegations: [],
-    };
+    } as ReadOrWriteOwned<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature,
+      A
+    >;
   }
 
   /** Delegate a capability to a `UserPublicKey`, restricted to a given `Area`. */
-  async delegateCapCommunal(
+
+  async delegateCapCommunal<
+    Cap extends CommunalCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      UserSignature
+    >,
+  >(
     { cap, user, area, secret }: {
-      cap: CommunalCapability<
-        NamespacePublicKey,
-        UserPublicKey,
-        UserSignature
-      >;
+      cap: Cap;
       user: UserPublicKey;
       area: Area<UserPublicKey>;
       /** The secret of this capabality's receiver. */
       secret: UserSecretKey;
     },
   ): Promise<
-    CommunalCapability<
+    ReadOrWriteCommunalCap<
       NamespacePublicKey,
       UserPublicKey,
-      UserSignature
+      UserSignature,
+      Cap
     >
   > {
     if (
@@ -206,29 +224,37 @@ export class Meadowcap<
     return {
       ...cap,
       delegations: [...cap.delegations, [area, user, signature]],
-    };
+    } as ReadOrWriteCommunalCap<
+      NamespacePublicKey,
+      UserPublicKey,
+      UserSignature,
+      Cap
+    >;
   }
 
   /** Delegate a capability to a `UserPublicKey`, restricted to a given `Area`. */
-  async delegateCapOwned(
+  async delegateCapOwned<
+    Cap extends OwnedCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature
+    >,
+  >(
     { cap, user, area, secret }: {
-      cap: OwnedCapability<
-        NamespacePublicKey,
-        UserPublicKey,
-        NamespaceSignature,
-        UserSignature
-      >;
+      cap: Cap;
       user: UserPublicKey;
       area: Area<UserPublicKey>;
       /** The secret of this capabality's receiver. */
       secret: UserSecretKey;
     },
   ): Promise<
-    OwnedCapability<
+    ReadOrWriteOwnedCap<
       NamespacePublicKey,
       UserPublicKey,
       NamespaceSignature,
-      UserSignature
+      UserSignature,
+      Cap
     >
   > {
     if (
@@ -263,7 +289,13 @@ export class Meadowcap<
     return {
       ...cap,
       delegations: [...cap.delegations, [area, user, signature]],
-    };
+    } as ReadOrWriteOwnedCap<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature,
+      Cap
+    >;
   }
 
   /** Returns whether a capability is valid or not. */
@@ -298,11 +330,15 @@ export class Meadowcap<
       NamespaceSignature,
       UserSignature
     >,
-  ): boolean | InvalidCapError {
+  ): cap is CommunalCapability<
+    NamespacePublicKey,
+    UserPublicKey,
+    UserSignature
+  > {
     const isCommunal = this.params.isCommunal(cap.namespaceKey);
 
     if ("initialAuthorisation" in cap && isCommunal) {
-      return new InvalidCapError(
+      throw new InvalidCapError(
         "OwnedCapability assigned to a communal namespace ",
       );
     }

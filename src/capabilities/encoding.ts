@@ -505,7 +505,11 @@ export function decodeMcCapability<
       namespaceKey: namespace,
       userKey: user,
       delegations,
-    };
+    } as CommunalCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      UserSignature
+    >;
   }
 
   // Owned cap.
@@ -698,7 +702,7 @@ export async function decodeStreamMcCapability<
       namespaceKey: namespace,
       userKey: user,
       delegations,
-    };
+    } as CommunalCapability<NamespacePublicKey, UserPublicKey, UserSignature>;
   }
 
   // Owned cap.

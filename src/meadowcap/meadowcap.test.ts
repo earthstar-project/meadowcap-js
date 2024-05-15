@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertRejects } from "$std/assert/mod.ts";
 import {
   ANY_SUBSPACE,
+  concat,
   encodeEntry,
   Entry,
   KeypairScheme,
@@ -82,7 +83,7 @@ const ecdsaScheme: KeypairScheme<ArrayBuffer, CryptoKey, ArrayBuffer> = {
   },
   signatures: {
     sign: (
-      _publicKey: ArrayBuffer,
+      publicKey: ArrayBuffer,
       secretKey: CryptoKey,
       bytestring: Uint8Array,
     ) => {
@@ -92,7 +93,7 @@ const ecdsaScheme: KeypairScheme<ArrayBuffer, CryptoKey, ArrayBuffer> = {
           hash: { name: "SHA-256" },
         },
         secretKey,
-        bytestring,
+        concat(new Uint8Array(publicKey), bytestring),
       );
     },
     verify: async (
@@ -118,7 +119,7 @@ const ecdsaScheme: KeypairScheme<ArrayBuffer, CryptoKey, ArrayBuffer> = {
         },
         publicKeyWeb,
         signature,
-        bytestring,
+        concat(new Uint8Array(publicKey), bytestring),
       );
     },
   },

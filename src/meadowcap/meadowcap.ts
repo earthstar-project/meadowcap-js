@@ -215,8 +215,10 @@ export class Meadowcap<
       user,
     );
 
+    const receiver = this.getCapReceiver(cap);
+
     const signature = await this.params.userScheme.signatures.sign(
-      user,
+      receiver,
       secret,
       handover,
     );
@@ -280,8 +282,10 @@ export class Meadowcap<
       user,
     );
 
+    const receiver = this.getCapReceiver(cap);
+
     const signature = await this.params.userScheme.signatures.sign(
-      user,
+      receiver,
       secret,
       handover,
     );

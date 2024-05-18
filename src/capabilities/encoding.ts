@@ -9,7 +9,6 @@ import { getGrantedAreaCommunal, getGrantedAreaOwned } from "./semantics.ts";
 import {
   ANY_SUBSPACE,
   Area,
-  concat,
   decodeAreaInArea,
   decodeCompactWidth,
   decodeStreamAreaInArea,
@@ -24,8 +23,9 @@ import {
   PathScheme,
   subspaceArea,
   TotalOrder,
-} from "../../deps.ts";
+} from "@earthstar/willow-utils";
 import { UserScheme } from "../meadowcap/types.ts";
+import { concat } from "@std/bytes";
 
 /** Returns the handover message to be signed when issuing a delegation for a communal capability. */
 export function handoverCommunal<
@@ -70,10 +70,7 @@ export function handoverCommunal<
     const newPubKey = opts.userScheme.encodings.publicKey.encode(newUser);
 
     return concat(
-      accessModeByte,
-      namespace,
-      areaInArea,
-      newPubKey,
+      [accessModeByte, namespace, areaInArea, newPubKey],
     );
   }
 
@@ -98,9 +95,7 @@ export function handoverCommunal<
   const newPubKey = opts.userScheme.encodings.publicKey.encode(newUser);
 
   return concat(
-    areaInArea,
-    userSignature,
-    newPubKey,
+    [areaInArea, userSignature, newPubKey],
   );
 }
 
@@ -153,9 +148,7 @@ export function handoverOwned<
     );
 
     return concat(
-      areaInArea,
-      userSignature,
-      userPublicKey,
+      [areaInArea, userSignature, userPublicKey],
     );
   }
 
@@ -180,9 +173,7 @@ export function handoverOwned<
   );
 
   return concat(
-    areaInArea,
-    userSignature,
-    userPublicKey,
+    [areaInArea, userSignature, userPublicKey],
   );
 }
 
@@ -222,8 +213,7 @@ export function handoverSubspace<
     );
 
     return concat(
-      userSignature,
-      userPublicKey,
+      [userSignature, userPublicKey],
     );
   }
 
@@ -234,10 +224,12 @@ export function handoverSubspace<
   );
 
   return concat(
-    userSignature,
-    opts.userScheme.encodings.publicKey.encode(
-      newUser,
-    ),
+    [
+      userSignature,
+      opts.userScheme.encodings.publicKey.encode(
+        newUser,
+      ),
+    ],
   );
 }
 
@@ -317,17 +309,21 @@ export function encodeMcCapability<
       const userPkEnc = opts.encodingUser.encode(pk);
       const sigEnc = opts.encodingUserSig.encode(sig);
 
-      encodedDelegationsAcc.push(concat(areaInAreaEncoded, userPkEnc, sigEnc));
+      encodedDelegationsAcc.push(
+        concat([areaInAreaEncoded, userPkEnc, sigEnc]),
+      );
 
       prevArea = area;
     }
 
     return concat(
-      new Uint8Array([header]),
-      encodedNamespace,
-      encodedUser,
-      compactWidthDelegationsLen,
-      ...encodedDelegationsAcc,
+      [
+        new Uint8Array([header]),
+        encodedNamespace,
+        encodedUser,
+        compactWidthDelegationsLen,
+        ...encodedDelegationsAcc,
+      ],
     );
   }
 
@@ -374,18 +370,20 @@ export function encodeMcCapability<
     const userPkEnc = opts.encodingUser.encode(pk);
     const sigEnc = opts.encodingUserSig.encode(sig);
 
-    encodedDelegationsAcc.push(concat(areaInAreaEncoded, userPkEnc, sigEnc));
+    encodedDelegationsAcc.push(concat([areaInAreaEncoded, userPkEnc, sigEnc]));
 
     prevArea = area;
   }
 
   return concat(
-    new Uint8Array([header]),
-    encodedNamespace,
-    encodedUser,
-    encodedNamespaceSig,
-    compactWidthDelegationsLen,
-    ...encodedDelegationsAcc,
+    [
+      new Uint8Array([header]),
+      encodedNamespace,
+      encodedUser,
+      encodedNamespaceSig,
+      compactWidthDelegationsLen,
+      ...encodedDelegationsAcc,
+    ],
   );
 }
 
@@ -830,16 +828,18 @@ export function encodeSubspaceCapability<
     const userPkEnc = opts.encodingUser.encode(pk);
     const sigEnc = opts.encodingUserSig.encode(sig);
 
-    encodedDelegationsAcc.push(concat(userPkEnc, sigEnc));
+    encodedDelegationsAcc.push(concat([userPkEnc, sigEnc]));
   }
 
   return concat(
-    new Uint8Array([header]),
-    namespaceEncoded,
-    userEncoded,
-    sigEncoded,
-    delLength,
-    ...encodedDelegationsAcc,
+    [
+      new Uint8Array([header]),
+      namespaceEncoded,
+      userEncoded,
+      sigEncoded,
+      delLength,
+      ...encodedDelegationsAcc,
+    ],
   );
 }
 

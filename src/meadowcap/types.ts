@@ -3,7 +3,7 @@ import {
   KeypairScheme,
   PathScheme,
   TotalOrder,
-} from "../../deps.ts";
+} from "@earthstar/willow-utils";
 import { McCapability } from "../capabilities/types.ts";
 
 // Yes. It's a lot.

@@ -56,14 +56,6 @@ to think about those parameters anymore.
 Complete API documentation can be found
 [here](https://deno.land/x/meadowcap/mod.ts).
 
-With ESM imports:
-
-```
-import { Meadowcap } from "https://deno.land/x/meadowcap/mod.ts"
-```
-
-NPM distribution coming very soon.
-
 ## Development
 
 Deno is used as the development runtime.

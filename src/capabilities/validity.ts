@@ -1,9 +1,8 @@
 import {
   areaIsIncluded,
-  concat,
   KeypairScheme,
   PathScheme,
-} from "../../deps.ts";
+} from "@earthstar/willow-utils";
 import { UserScheme } from "../meadowcap/types.ts";
 import {
   handoverCommunal,
@@ -23,6 +22,7 @@ import {
   McSubspaceCapability,
   OwnedCapability,
 } from "./types.ts";
+import { concat } from "@std/bytes";
 
 /** Returns whether a communal capability is valid. */
 export async function isValidCapCommunal<
@@ -106,8 +106,7 @@ export async function isValidCapOwned<
     ]);
 
     const message = concat(
-      accessModeByte,
-      opts.userScheme.encodings.publicKey.encode(cap.userKey),
+      [accessModeByte, opts.userScheme.encodings.publicKey.encode(cap.userKey)],
     );
 
     return opts.namespaceScheme.signatures.verify(
@@ -171,8 +170,10 @@ export async function isValidCapSubspace<
 ): Promise<boolean> {
   if (cap.delegations.length === 0) {
     const message = concat(
-      new Uint8Array([0x2]),
-      opts.userScheme.encodings.publicKey.encode(cap.userKey),
+      [
+        new Uint8Array([0x2]),
+        opts.userScheme.encodings.publicKey.encode(cap.userKey),
+      ],
     );
 
     return opts.namespaceScheme.signatures.verify(

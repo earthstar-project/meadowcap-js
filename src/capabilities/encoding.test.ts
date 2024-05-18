@@ -1,5 +1,5 @@
 import FIFO from "https://deno.land/x/fifo@v0.2.2/mod.ts";
-import { delay } from "https://deno.land/std@0.202.0/async/delay.ts";
+import { delay } from "@std/async";
 import {
   decodeMcCapability,
   decodeStreamMcCapability,
@@ -9,14 +9,13 @@ import {
   encodeSubspaceCapability,
 } from "./encoding.ts";
 import { McCapability, McSubspaceCapability } from "./types.ts";
-
 import {
   EncodingScheme,
   GrowingBytes,
   OPEN_END,
   orderBytes,
-} from "../../deps.ts";
-import { assertEquals } from "$std/assert/assert_equals.ts";
+} from "@earthstar/willow-utils";
+import { assertEquals } from "@std/assert";
 
 function makeEncodings(len: number): EncodingScheme<Uint8Array> {
   return {

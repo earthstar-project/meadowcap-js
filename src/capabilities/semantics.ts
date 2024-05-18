@@ -1,4 +1,4 @@
-import { ANY_SUBSPACE, Area, OPEN_END } from "../../deps.ts";
+import { ANY_SUBSPACE, Area, OPEN_END } from "@earthstar/willow-utils";
 import {
   CommunalCapability,
   McCapability,

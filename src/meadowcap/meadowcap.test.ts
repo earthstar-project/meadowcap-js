@@ -1,13 +1,11 @@
-import { assert, assertEquals, assertRejects } from "$std/assert/mod.ts";
 import {
   ANY_SUBSPACE,
-  concat,
   encodeEntry,
   Entry,
   KeypairScheme,
   OPEN_END,
   orderBytes,
-} from "../../deps.ts";
+} from "@earthstar/willow-utils";
 import {
   getGrantedAreaCommunal,
   getGrantedAreaOwned,
@@ -15,6 +13,8 @@ import {
   getReceiver,
 } from "../capabilities/semantics.ts";
 import { Meadowcap } from "./meadowcap.ts";
+import { concat } from "@std/bytes";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 
 function isCommunal(key: ArrayBuffer): boolean {
   const ui8 = new Uint8Array(key);
@@ -93,7 +93,7 @@ const ecdsaScheme: KeypairScheme<ArrayBuffer, CryptoKey, ArrayBuffer> = {
           hash: { name: "SHA-256" },
         },
         secretKey,
-        concat(new Uint8Array(publicKey), bytestring),
+        concat([new Uint8Array(publicKey), bytestring]),
       );
     },
     verify: async (
@@ -119,7 +119,7 @@ const ecdsaScheme: KeypairScheme<ArrayBuffer, CryptoKey, ArrayBuffer> = {
         },
         publicKeyWeb,
         signature,
-        concat(new Uint8Array(publicKey), bytestring),
+        concat([new Uint8Array(publicKey), bytestring]),
       );
     },
   },

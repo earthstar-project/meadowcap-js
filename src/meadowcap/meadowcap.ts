@@ -2,13 +2,12 @@ import {
   ANY_SUBSPACE,
   Area,
   areaIsIncluded,
-  concat,
   encodeEntry,
   Entry,
   entryPosition,
   GrowingBytes,
   isIncludedArea,
-} from "../../deps.ts";
+} from "@earthstar/willow-utils";
 import {
   decodeMcCapability,
   decodeStreamMcCapability,
@@ -45,6 +44,7 @@ import {
 import { InvalidCapError, MeadowcapError } from "./errors.ts";
 
 import { MeadowcapAuthorisationToken, MeadowcapParams } from "./types.ts";
+import { concat } from "@std/bytes";
 
 /** Represents a configured instantiation of [Meadowcap](https://willowprotocol.org/specs/meadowcap), used for the creation, delegation, and validation of capabilities, and more.
  *
@@ -142,8 +142,7 @@ export class Meadowcap<
     const accessModeByte = new Uint8Array([accessMode === "read" ? 0x2 : 0x3]);
 
     const message = concat(
-      accessModeByte,
-      this.params.userScheme.encodings.publicKey.encode(user),
+      [accessModeByte, this.params.userScheme.encodings.publicKey.encode(user)],
     );
 
     const signature = await this.params.namespaceKeypairScheme.signatures
@@ -443,7 +442,14 @@ export class Meadowcap<
   }
 
   /** Decode a McCapability from bytes. */
-  decodeCap(encoded: Uint8Array) {
+  decodeCap(
+    encoded: Uint8Array,
+  ): McCapability<
+    NamespacePublicKey,
+    UserPublicKey,
+    NamespaceSignature,
+    UserSignature
+  > {
     return decodeMcCapability({
       pathScheme: this.params.pathScheme,
       encodingNamespace: this.params.namespaceKeypairScheme.encodings.publicKey,
@@ -456,7 +462,14 @@ export class Meadowcap<
   }
 
   /** Decode a McCapability from an incoming stream of bytes. */
-  decodeStreamingCap(bytes: GrowingBytes) {
+  decodeStreamingCap(bytes: GrowingBytes): Promise<
+    McCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature
+    >
+  > {
     return decodeStreamMcCapability({
       pathScheme: this.params.pathScheme,
       encodingNamespace: this.params.namespaceKeypairScheme.encodings.publicKey,
@@ -510,8 +523,10 @@ export class Meadowcap<
     >
   > {
     const messageToSign = concat(
-      new Uint8Array([0x2]),
-      this.params.userScheme.encodings.publicKey.encode(userKey),
+      [
+        new Uint8Array([0x2]),
+        this.params.userScheme.encodings.publicKey.encode(userKey),
+      ],
     );
 
     const signature = await this.params.namespaceKeypairScheme.signatures.sign(
@@ -598,7 +613,7 @@ export class Meadowcap<
       UserSignature
     >,
     omitNamespace?: boolean,
-  ) {
+  ): Uint8Array {
     return encodeSubspaceCapability({
       omitNamespace,
       pathScheme: this.params.pathScheme,
@@ -612,7 +627,15 @@ export class Meadowcap<
   }
 
   /** Decode a McSubspaceCapability from bytes. */
-  decodeSubspaceCap(encoded: Uint8Array, knownNamespace?: NamespacePublicKey) {
+  decodeSubspaceCap(
+    encoded: Uint8Array,
+    knownNamespace?: NamespacePublicKey,
+  ): McSubspaceCapability<
+    NamespacePublicKey,
+    UserPublicKey,
+    NamespaceSignature,
+    UserSignature
+  > {
     return decodeSubspaceCapability({
       knownNamespace,
       pathScheme: this.params.pathScheme,
@@ -629,7 +652,14 @@ export class Meadowcap<
   decodeStreamingSubspaceCap(
     bytes: GrowingBytes,
     knownNamespace?: NamespacePublicKey,
-  ) {
+  ): Promise<
+    McSubspaceCapability<
+      NamespacePublicKey,
+      UserPublicKey,
+      NamespaceSignature,
+      UserSignature
+    >
+  > {
     return decodeStreamSubspaceCapability({
       knownNamespace,
       pathScheme: this.params.pathScheme,

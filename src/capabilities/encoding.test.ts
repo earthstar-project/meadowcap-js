@@ -8,9 +8,9 @@ import {
   encodeMcCapability,
   encodeSubspaceCapability,
 } from "./encoding.ts";
-import { McCapability, McSubspaceCapability } from "./types.ts";
+import type { McCapability, McSubspaceCapability } from "./types.ts";
 import {
-  EncodingScheme,
+  type EncodingScheme,
   GrowingBytes,
   OPEN_END,
   orderBytes,

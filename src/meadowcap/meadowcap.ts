@@ -1,11 +1,11 @@
 import {
   ANY_SUBSPACE,
-  Area,
+  type Area,
   areaIsIncluded,
   encodeEntry,
-  Entry,
+  type Entry,
   entryPosition,
-  GrowingBytes,
+  type GrowingBytes,
   isIncludedArea,
 } from "@earthstar/willow-utils";
 import {
@@ -25,7 +25,7 @@ import {
   getReceiver,
   getReceiverSubspaceCap,
 } from "../capabilities/semantics.ts";
-import {
+import type {
   AccessMode,
   CommunalCapability,
   McCapability,
@@ -43,7 +43,7 @@ import {
 } from "../capabilities/validity.ts";
 import { InvalidCapError, MeadowcapError } from "./errors.ts";
 
-import { MeadowcapAuthorisationToken, MeadowcapParams } from "./types.ts";
+import type { MeadowcapAuthorisationToken, MeadowcapParams } from "./types.ts";
 import { concat } from "@std/bytes";
 
 /** Represents a configured instantiation of [Meadowcap](https://willowprotocol.org/specs/meadowcap), used for the creation, delegation, and validation of capabilities, and more.

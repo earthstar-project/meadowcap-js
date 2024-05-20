@@ -1,10 +1,10 @@
-import {
+import type {
   EncodingScheme,
   KeypairScheme,
   PathScheme,
   TotalOrder,
 } from "@earthstar/willow-utils";
-import { McCapability } from "../capabilities/types.ts";
+import type { McCapability } from "../capabilities/types.ts";
 
 // Yes. It's a lot.
 export type MeadowcapParams<

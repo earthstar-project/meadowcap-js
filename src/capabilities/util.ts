@@ -1,4 +1,4 @@
-import { CommunalCapability, OwnedCapability } from "./types.ts";
+import type { CommunalCapability, OwnedCapability } from "./types.ts";
 
 /** Determine if a capability is communal or not. */
 export function isCommunalCap<

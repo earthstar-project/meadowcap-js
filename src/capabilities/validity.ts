@@ -1,9 +1,9 @@
 import {
   areaIsIncluded,
-  KeypairScheme,
-  PathScheme,
+  type KeypairScheme,
+  type PathScheme,
 } from "@earthstar/willow-utils";
-import { UserScheme } from "../meadowcap/types.ts";
+import type { UserScheme } from "../meadowcap/types.ts";
 import {
   handoverCommunal,
   handoverOwned,
@@ -17,7 +17,7 @@ import {
   getReceiver,
   getReceiverSubspaceCap,
 } from "./semantics.ts";
-import {
+import type {
   CommunalCapability,
   McSubspaceCapability,
   OwnedCapability,

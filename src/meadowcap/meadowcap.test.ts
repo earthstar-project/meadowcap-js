@@ -1,8 +1,8 @@
 import {
   ANY_SUBSPACE,
   encodeEntry,
-  Entry,
-  KeypairScheme,
+  type Entry,
+  type KeypairScheme,
   OPEN_END,
   orderBytes,
 } from "@earthstar/willow-utils";

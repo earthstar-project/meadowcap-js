@@ -1,4 +1,4 @@
-import { Area } from "@earthstar/willow-utils";
+import type { Area } from "@earthstar/willow-utils";
 
 /** Whether a capability grants read or write access. */
 export type AccessMode = "read" | "write";

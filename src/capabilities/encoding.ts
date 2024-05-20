@@ -1,4 +1,4 @@
-import {
+import type {
   CommunalCapability,
   Delegation,
   McCapability,
@@ -8,23 +8,23 @@ import {
 import { getGrantedAreaCommunal, getGrantedAreaOwned } from "./semantics.ts";
 import {
   ANY_SUBSPACE,
-  Area,
+  type Area,
   decodeAreaInArea,
   decodeCompactWidth,
   decodeStreamAreaInArea,
   encodeAreaInArea,
   encodeAreaInAreaLength,
   encodeCompactWidth,
-  EncodingScheme,
+  type EncodingScheme,
   fullArea,
-  GrowingBytes,
-  KeypairScheme,
+  type GrowingBytes,
+  type KeypairScheme,
   OPEN_END,
-  PathScheme,
+  type PathScheme,
   subspaceArea,
-  TotalOrder,
+  type TotalOrder,
 } from "@earthstar/willow-utils";
-import { UserScheme } from "../meadowcap/types.ts";
+import type { UserScheme } from "../meadowcap/types.ts";
 import { concat } from "@std/bytes";
 
 /** Returns the handover message to be signed when issuing a delegation for a communal capability. */

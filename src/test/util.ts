@@ -8,22 +8,22 @@ import { concat } from "$std/bytes/concat.ts";
 
 import {
   addToDisjointInterval,
-  DisjointInterval,
-  Interval,
+  type DisjointInterval,
+  type Interval,
   makeSuccessorPath,
   orderPaths,
   orderTimestamps,
-  PredecessorFn,
+  type PredecessorFn,
   predecessorPath,
   predecessorTimestamp,
-  Range,
+  type Range,
   rangeFromInterval,
-  SuccessorFn,
+  type SuccessorFn,
   successorTimestamp,
-  ThreeDimensionalInterval,
-  ThreeDimensionalProduct,
-  ThreeDimensionalRange,
-  TotalOrder,
+  type ThreeDimensionalInterval,
+  type ThreeDimensionalProduct,
+  type ThreeDimensionalRange,
+  type TotalOrder,
 } from "../../deps.ts";
 import { encodeCapability } from "../capabilities/encoding.ts";
 import {
@@ -32,7 +32,7 @@ import {
   getNamespace,
   getReceiver,
 } from "../capabilities/semantics.ts";
-import {
+import type {
   AccessMode,
   Capability,
   DelegationCap,
@@ -41,7 +41,7 @@ import {
   SourceCap,
 } from "../capabilities/types.ts";
 
-import { EncodingScheme, KeypairScheme } from "../meadowcap/types.ts";
+import type { EncodingScheme, KeypairScheme } from "../meadowcap/types.ts";
 
 export function getRandomIntervalKind(): Interval<number>["kind"] {
   return Math.random() > 0.5 ? "open" : "closed_exclusive";

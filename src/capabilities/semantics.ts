@@ -1,5 +1,5 @@
-import { ANY_SUBSPACE, Area, OPEN_END } from "@earthstar/willow-utils";
-import {
+import { ANY_SUBSPACE, type Area, OPEN_END } from "@earthstar/willow-utils";
+import type {
   CommunalCapability,
   McCapability,
   McSubspaceCapability,

@@ -53,8 +53,12 @@ to think about those parameters anymore.
 
 ## Usage
 
+This module is published on JSR. See the
+[@earthstar/meadowcap page](https://jsr.io/@earthstar) for installation
+instructions
+
 Complete API documentation can be found
-[here](https://deno.land/x/meadowcap/mod.ts).
+[here](https://jsr.io/@earthstar/meadowcap/doc).
 
 ## Development
 

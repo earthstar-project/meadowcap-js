@@ -475,22 +475,14 @@ Deno.test("isAuthorisedWrite", async () => {
     };
 
     const encodedEntry = encodeEntry({
-      namespaceScheme: ecdsaScheme.encodings.publicKey,
-      subspaceScheme: ecdsaScheme.encodings.publicKey,
+      encodeNamespace: ecdsaScheme.encodings.publicKey.encode,
+      encodeSubspace: ecdsaScheme.encodings.publicKey.encode,
       pathScheme: {
         maxComponentCount: 3,
         maxComponentLength: 4,
         maxPathLength: 10,
       },
-      payloadScheme: {
-        encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
-        decode: (enc: Uint8Array) => enc.buffer,
-        encodedLength: () => 32,
-        decodeStream: () => {
-          // Not used here.
-          return Promise.resolve(new Uint8Array());
-        },
-      },
+      encodePayload: (buffer: ArrayBuffer) => new Uint8Array(buffer),
     }, entry);
 
     const signature = await ecdsaScheme.signatures.sign(
@@ -523,22 +515,14 @@ Deno.test("isAuthorisedWrite", async () => {
     };
 
     const encodedEntry = encodeEntry({
-      namespaceScheme: ecdsaScheme.encodings.publicKey,
-      subspaceScheme: ecdsaScheme.encodings.publicKey,
+      encodeNamespace: ecdsaScheme.encodings.publicKey.encode,
+      encodeSubspace: ecdsaScheme.encodings.publicKey.encode,
       pathScheme: {
         maxComponentCount: 3,
         maxComponentLength: 4,
         maxPathLength: 10,
       },
-      payloadScheme: {
-        encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
-        decode: (enc: Uint8Array) => enc.buffer,
-        encodedLength: () => 32,
-        decodeStream: () => {
-          // Not used here.
-          return Promise.resolve(new Uint8Array());
-        },
-      },
+      encodePayload: (buffer: ArrayBuffer) => new Uint8Array(buffer),
     }, entry);
 
     const signature = await ecdsaScheme.signatures.sign(
@@ -571,22 +555,14 @@ Deno.test("isAuthorisedWrite", async () => {
     };
 
     const encodedEntry = encodeEntry({
-      namespaceScheme: ecdsaScheme.encodings.publicKey,
-      subspaceScheme: ecdsaScheme.encodings.publicKey,
+      encodeNamespace: ecdsaScheme.encodings.publicKey.encode,
+      encodeSubspace: ecdsaScheme.encodings.publicKey.encode,
       pathScheme: {
         maxComponentCount: 3,
         maxComponentLength: 4,
         maxPathLength: 10,
       },
-      payloadScheme: {
-        encode: (buffer: ArrayBuffer) => new Uint8Array(buffer),
-        decode: (enc: Uint8Array) => enc.buffer,
-        encodedLength: () => 32,
-        decodeStream: () => {
-          // Not used here.
-          return Promise.resolve(new Uint8Array());
-        },
-      },
+      encodePayload: (buffer: ArrayBuffer) => new Uint8Array(buffer),
     }, entry);
 
     const signature = await ecdsaScheme.signatures.sign(

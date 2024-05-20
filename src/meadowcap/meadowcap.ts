@@ -406,10 +406,11 @@ export class Meadowcap<
     const receiver = this.getCapReceiver(token.capability);
 
     const encodedEntry = encodeEntry({
-      namespaceScheme: this.params.namespaceKeypairScheme.encodings.publicKey,
+      encodeNamespace:
+        this.params.namespaceKeypairScheme.encodings.publicKey.encode,
       pathScheme: this.params.pathScheme,
-      subspaceScheme: this.params.userScheme.encodings.publicKey,
-      payloadScheme: this.params.payloadScheme,
+      encodeSubspace: this.params.userScheme.encodings.publicKey.encode,
+      encodePayload: this.params.payloadScheme.encode,
     }, entry);
 
     return this.params.userScheme.signatures.verify(
